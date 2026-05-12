@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-green: #1a5c1a;
+  --secondary-green: #2d8a2d;
+  --accent-brown: #8b6914;
+  --light-green: #e8f5e9;
+  --dark-green: #0d3b0d;
+  --cream: #faf8f3;
+  --earth: #d4c4a8;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--cream);
+  color: #1f2937;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 sm:px-6 py-2.5 bg-gradient-to-r from-green-700 to-green-600 text-white rounded-lg font-medium shadow-md hover:from-green-800 hover:to-green-700 transition-all duration-200 active:scale-95 text-sm sm:text-base;
+  }
+
+  .btn-secondary {
+    @apply px-4 sm:px-6 py-2.5 bg-amber-600 text-white rounded-lg font-medium shadow-md hover:bg-amber-700 transition-all duration-200 active:scale-95 text-sm sm:text-base;
+  }
+
+  .btn-danger {
+    @apply px-4 sm:px-6 py-2.5 bg-red-600 text-white rounded-lg font-medium shadow-md hover:bg-red-700 transition-all duration-200 active:scale-95 text-sm sm:text-base;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-lg border border-green-100 overflow-hidden;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white text-sm;
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 text-gray-300 hover:text-white hover:bg-green-800 rounded-lg transition-all duration-200 cursor-pointer text-sm;
+  }
+
+  .sidebar-item.active {
+    @apply bg-green-800 text-white border-l-4 border-amber-400;
+  }
+
+  .table-header {
+    @apply px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-white uppercase tracking-wider bg-gradient-to-r from-green-700 to-green-600;
+  }
+
+  .table-cell {
+    @apply px-4 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-700 border-b border-gray-100;
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@media (max-width: 640px) {
+  .responsive-grid {
+    @apply grid-cols-1;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .responsive-grid {
+    @apply grid-cols-2;
+  }
+}
+
+@media (min-width: 1025px) {
+  .responsive-grid {
+    @apply grid-cols-4;
+  }
+}
