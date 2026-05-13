@@ -88,11 +88,6 @@ export default function InputStockGudangPage() {
     return formData.unit;
   };
 
-  const getSecondaryUnit = () => {
-    if (formData.unit === "BOTOL") return "DUS";
-    return null;
-  };
-
   const calculateStock = (
     stokAwalUnit: number,
     stokAwalKG: number,
@@ -114,16 +109,6 @@ export default function InputStockGudangPage() {
     }
 
     return { stokAkhirUnit, stokAkhirKG };
-  };
-
-  const convertBotolToZak = (botol: number, botolPerDus: number, dusPerZak: number) => {
-    const totalBotolPerZak = botolPerDus * dusPerZak;
-    return botol / totalBotolPerZak;
-  };
-
-  const convertZakToBotol = (zak: number, botolPerDus: number, dusPerZak: number) => {
-    const totalBotolPerZak = botolPerDus * dusPerZak;
-    return zak * totalBotolPerZak;
   };
 
   const validateForm = () => {
@@ -223,7 +208,6 @@ export default function InputStockGudangPage() {
         docData.botolPerDus = botolPerDus;
         docData.dusPerZak = dusPerZak;
         docData.displayUnit = "ZAK";
-        docData.secondaryUnit = "DUS";
       }
 
       await addDoc(collection(db, "stockGudang"), docData);
