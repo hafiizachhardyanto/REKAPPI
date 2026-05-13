@@ -96,6 +96,39 @@ export default function DashboardPage() {
       href: "/dashboard/laporan-stock-gudang",
       color: "from-teal-600 to-teal-700",
     },
+    {
+      title: "Transaksi Masuk",
+      desc: "Input barang masuk ke gudang",
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+        </svg>
+      ),
+      href: "/dashboard/transaksi-barang-masuk",
+      color: "from-blue-600 to-blue-700",
+    },
+    {
+      title: "Transaksi Keluar",
+      desc: "Input barang keluar dari gudang",
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7" />
+        </svg>
+      ),
+      href: "/dashboard/transaksi-barang-keluar",
+      color: "from-orange-600 to-orange-700",
+    },
+    {
+      title: "Riwayat Transaksi",
+      desc: "Lihat riwayat barang masuk dan keluar",
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      href: "/dashboard/riwayat-transaksi",
+      color: "from-purple-600 to-purple-700",
+    },
   ];
 
   return (

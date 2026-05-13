@@ -51,6 +51,33 @@ const menuItems = [
       </svg>
     ),
   },
+  {
+    href: "/dashboard/transaksi-barang-masuk",
+    label: "Barang Masuk",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18M13 5l7 7-7 7" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/transaksi-barang-keluar",
+    label: "Barang Keluar",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/riwayat-transaksi",
+    label: "Riwayat Transaksi",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {

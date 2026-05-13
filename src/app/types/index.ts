@@ -59,3 +59,41 @@ export interface UserSession {
   nama: string;
   role: string;
 }
+
+export interface TransaksiBarangMasuk {
+  id: string;
+  tanggal: string;
+  kodeBarang: string;
+  namaBarang: string;
+  unit: "ZAK" | "DUS" | "KG" | "BOTOL";
+  jumlahZAK: number;
+  botolPerDus?: number;
+  bobotPerBotol?: number;
+  sopirNopol: string;
+  fot: string;
+  createdBy: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface TransaksiBarangKeluar {
+  id: string;
+  tanggal: string;
+  kodeBarang: string;
+  namaBarang: string;
+  unit: "ZAK" | "DUS" | "KG" | "BOTOL";
+  jumlahZAK: number;
+  botolPerDus?: number;
+  bobotPerBotol?: number;
+  namaCustomer: string;
+  nomorPI: string;
+  nomorInvoice: string;
+  sopirNopolList: string[];
+  nomorSuratPengangkutan: string;
+  fot: string;
+  createdBy: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export type JenisTransaksi = "barangMasuk" | "barangKeluar";
