@@ -37,11 +37,10 @@ export default function LaporanStockGudangPage() {
     bobotPerUnit: "50",
     stokAwalUnit: "",
     stokAwalKG: "",
-    stokAwalBotol: "",
+    barangMasukUnit: "",
     barangMasukKG: "",
-    barangMasukBotol: "",
+    barangKeluarUnit: "",
     barangKeluarKG: "",
-    barangKeluarBotol: "",
   });
 
   useEffect(() => {
@@ -94,24 +93,18 @@ export default function LaporanStockGudangPage() {
   });
 
   const calculateStock = (
+    stokAwalUnit: number,
     stokAwalKG: number,
-    stokAwalBotol: number,
+    barangMasukUnit: number,
     barangMasukKG: number,
-    barangMasukBotol: number,
+    barangKeluarUnit: number,
     barangKeluarKG: number,
-    barangKeluarBotol: number,
     bobotPerUnit: number,
     unit: string
   ) => {
+    const stokAkhirUnit = stokAwalUnit + barangMasukUnit - barangKeluarUnit;
     const stokAkhirKG = stokAwalKG + barangMasukKG - barangKeluarKG;
-    const stokAkhirBotol = stokAwalBotol + barangMasukBotol - barangKeluarBotol;
-    let stokAkhirUnit = 0;
-    if (unit === "ZAK" || unit === "DUS") {
-      stokAkhirUnit = Math.floor(stokAkhirKG / bobotPerUnit);
-    } else if (unit === "BOTOL") {
-      stokAkhirUnit = stokAkhirBotol;
-    }
-    return { stokAkhirKG, stokAkhirBotol, stokAkhirUnit };
+    return { stokAkhirUnit, stokAkhirKG };
   };
 
   const handleEdit = (item: StockGudang) => {
@@ -124,11 +117,10 @@ export default function LaporanStockGudangPage() {
       bobotPerUnit: (item.bobotPerUnit || 50).toString(),
       stokAwalUnit: (item.stokAwalUnit || 0).toString(),
       stokAwalKG: item.stokAwalKG.toString(),
-      stokAwalBotol: (item.stokAwalBotol || 0).toString(),
+      barangMasukUnit: (item.barangMasukUnit || 0).toString(),
       barangMasukKG: item.barangMasukKG.toString(),
-      barangMasukBotol: (item.barangMasukBotol || 0).toString(),
+      barangKeluarUnit: (item.barangKeluarUnit || 0).toString(),
       barangKeluarKG: item.barangKeluarKG.toString(),
-      barangKeluarBotol: (item.barangKeluarBotol || 0).toString(),
     });
     setIsEditModalOpen(true);
   };
@@ -144,17 +136,18 @@ export default function LaporanStockGudangPage() {
 
     setIsSubmitting(true);
     try {
+      const isUnitBased = editForm.unit === "ZAK" || editForm.unit === "DUS" || editForm.unit === "BOTOL";
+      const stokAwalUnit = isUnitBased ? parseFloat(editForm.stokAwalUnit) || 0 : 0;
       const stokAwalKG = parseFloat(editForm.stokAwalKG);
-      const stokAwalBotol = parseFloat(editForm.stokAwalBotol) || 0;
+      const barangMasukUnit = isUnitBased ? parseFloat(editForm.barangMasukUnit) || 0 : 0;
       const barangMasukKG = parseFloat(editForm.barangMasukKG);
-      const barangMasukBotol = parseFloat(editForm.barangMasukBotol) || 0;
+      const barangKeluarUnit = isUnitBased ? parseFloat(editForm.barangKeluarUnit) || 0 : 0;
       const barangKeluarKG = parseFloat(editForm.barangKeluarKG);
-      const barangKeluarBotol = parseFloat(editForm.barangKeluarBotol) || 0;
       const bobotPerUnit = parseFloat(editForm.bobotPerUnit) || 50;
 
-      const { stokAkhirKG, stokAkhirBotol, stokAkhirUnit } = calculateStock(
-        stokAwalKG, stokAwalBotol, barangMasukKG, barangMasukBotol,
-        barangKeluarKG, barangKeluarBotol, bobotPerUnit, editForm.unit
+      const { stokAkhirUnit, stokAkhirKG } = calculateStock(
+        stokAwalUnit, stokAwalKG, barangMasukUnit, barangMasukKG,
+        barangKeluarUnit, barangKeluarKG, bobotPerUnit, editForm.unit
       );
 
       await updateDoc(doc(db, "stockGudang", selectedItem.id), {
@@ -163,16 +156,14 @@ export default function LaporanStockGudangPage() {
         namaBarang: editForm.namaBarang.trim(),
         unit: editForm.unit,
         bobotPerUnit: bobotPerUnit,
-        stokAwalUnit: parseFloat(editForm.stokAwalUnit) || 0,
+        stokAwalUnit: stokAwalUnit,
         stokAwalKG: stokAwalKG,
-        stokAwalBotol: stokAwalBotol,
+        barangMasukUnit: barangMasukUnit,
         barangMasukKG: barangMasukKG,
-        barangMasukBotol: barangMasukBotol,
+        barangKeluarUnit: barangKeluarUnit,
         barangKeluarKG: barangKeluarKG,
-        barangKeluarBotol: barangKeluarBotol,
-        stokAkhirKG: stokAkhirKG,
-        stokAkhirBotol: stokAkhirBotol,
         stokAkhirUnit: stokAkhirUnit,
+        stokAkhirKG: stokAkhirKG,
         updatedAt: serverTimestamp(),
       });
 
@@ -204,14 +195,12 @@ export default function LaporanStockGudangPage() {
       "Bobot Per Unit (KG)": item.unit === "KG" ? "-" : item.bobotPerUnit,
       "Stok Awal (Unit)": item.stokAwalUnit || 0,
       "Stok Awal (KG)": item.stokAwalKG,
-      "Stok Awal (BOTOL)": item.stokAwalBotol || 0,
+      "Barang Masuk (Unit)": item.barangMasukUnit || 0,
       "Barang Masuk (KG)": item.barangMasukKG,
-      "Barang Masuk (BOTOL)": item.barangMasukBotol || 0,
+      "Barang Keluar (Unit)": item.barangKeluarUnit || 0,
       "Barang Keluar (KG)": item.barangKeluarKG,
-      "Barang Keluar (BOTOL)": item.barangKeluarBotol || 0,
-      "Stok Akhir (KG)": item.stokAkhirKG,
       "Stok Akhir (Unit)": item.stokAkhirUnit || 0,
-      "Stok Akhir (BOTOL)": item.stokAkhirBotol || 0,
+      "Stok Akhir (KG)": item.stokAkhirKG,
       "Dibuat Oleh": item.createdBy,
       "Tanggal Update": item.updatedAt ? new Date(item.updatedAt).toLocaleDateString("id-ID") : "-",
     }));
@@ -256,12 +245,12 @@ export default function LaporanStockGudangPage() {
   ];
 
   const editPreview = calculateStock(
+    parseFloat(editForm.stokAwalUnit) || 0,
     parseFloat(editForm.stokAwalKG) || 0,
-    parseFloat(editForm.stokAwalBotol) || 0,
+    parseFloat(editForm.barangMasukUnit) || 0,
     parseFloat(editForm.barangMasukKG) || 0,
-    parseFloat(editForm.barangMasukBotol) || 0,
+    parseFloat(editForm.barangKeluarUnit) || 0,
     parseFloat(editForm.barangKeluarKG) || 0,
-    parseFloat(editForm.barangKeluarBotol) || 0,
     parseFloat(editForm.bobotPerUnit) || 50,
     editForm.unit
   );
@@ -327,11 +316,8 @@ export default function LaporanStockGudangPage() {
       width: "160px",
       render: (row: StockGudang) => (
         <div className="text-sm">
-          {(row.unit === "ZAK" || row.unit === "DUS") && (
+          {row.unit !== "KG" && (
             <p className="font-mono font-medium">{row.stokAwalUnit?.toLocaleString()} {row.unit}</p>
-          )}
-          {row.unit === "BOTOL" && (
-            <p className="font-mono font-medium">{row.stokAwalBotol?.toLocaleString()} BOTOL</p>
           )}
           <p className="text-gray-500 text-xs">{row.stokAwalKG.toLocaleString()} KG</p>
         </div>
@@ -343,10 +329,10 @@ export default function LaporanStockGudangPage() {
       width: "140px",
       render: (row: StockGudang) => (
         <div className="text-sm">
-          <span className="text-green-600 font-mono font-medium">+{row.barangMasukKG.toLocaleString()} KG</span>
-          {row.unit === "BOTOL" && (
-            <p className="text-green-500 font-mono text-xs">+{row.barangMasukBotol?.toLocaleString()} BOTOL</p>
+          {row.unit !== "KG" && (
+            <p className="text-green-600 font-mono font-medium">+{row.barangMasukUnit?.toLocaleString()} {row.unit}</p>
           )}
+          <p className="text-green-500 text-xs">+{row.barangMasukKG.toLocaleString()} KG</p>
         </div>
       ),
     },
@@ -356,10 +342,10 @@ export default function LaporanStockGudangPage() {
       width: "140px",
       render: (row: StockGudang) => (
         <div className="text-sm">
-          <span className="text-red-600 font-mono font-medium">-{row.barangKeluarKG.toLocaleString()} KG</span>
-          {row.unit === "BOTOL" && (
-            <p className="text-red-500 font-mono text-xs">-{row.barangKeluarBotol?.toLocaleString()} BOTOL</p>
+          {row.unit !== "KG" && (
+            <p className="text-red-600 font-mono font-medium">-{row.barangKeluarUnit?.toLocaleString()} {row.unit}</p>
           )}
+          <p className="text-red-500 text-xs">-{row.barangKeluarKG.toLocaleString()} KG</p>
         </div>
       ),
     },
@@ -379,8 +365,8 @@ export default function LaporanStockGudangPage() {
       width: "130px",
       render: (row: StockGudang) => (
         <span className="font-mono font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded">
-          {row.unit === "BOTOL"
-            ? `${row.stokAkhirBotol?.toLocaleString()} BOTOL`
+          {row.unit === "KG"
+            ? `${row.stokAkhirKG.toLocaleString()} KG`
             : `${row.stokAkhirUnit?.toLocaleString()} ${row.unit}`}
         </span>
       ),
@@ -437,12 +423,6 @@ export default function LaporanStockGudangPage() {
     return filteredData
       .filter((d) => d.unit === unitType)
       .reduce((sum, d) => sum + (d.stokAkhirUnit || 0), 0);
-  };
-
-  const getTotalBotol = () => {
-    return filteredData
-      .filter((d) => d.unit === "BOTOL")
-      .reduce((sum, d) => sum + (d.stokAkhirBotol || 0), 0);
   };
 
   return (
@@ -512,7 +492,7 @@ export default function LaporanStockGudangPage() {
           </div>
           <div className="p-4 bg-pink-50 rounded-xl border border-pink-100">
             <p className="text-xs text-pink-600 uppercase tracking-wide font-semibold">Total BOTOL</p>
-            <p className="text-2xl font-bold text-pink-700 mt-1">{getTotalBotol().toLocaleString()}</p>
+            <p className="text-2xl font-bold text-pink-700 mt-1">{getTotalUnit("BOTOL").toLocaleString()}</p>
           </div>
           <div className="p-4 bg-red-50 rounded-xl border border-red-100">
             <p className="text-xs text-red-600 uppercase tracking-wide font-semibold">Stock Menipis</p>
@@ -584,21 +564,15 @@ export default function LaporanStockGudangPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-green-50 rounded-xl border border-green-100">
                 <p className="text-xs text-green-600 uppercase tracking-wide font-semibold">Stok Awal</p>
-                {(selectedItem.unit === "ZAK" || selectedItem.unit === "DUS") && (
+                {selectedItem.unit !== "KG" && (
                   <p className="text-xl font-bold text-green-700">{selectedItem.stokAwalUnit?.toLocaleString()} {selectedItem.unit}</p>
-                )}
-                {selectedItem.unit === "BOTOL" && (
-                  <p className="text-xl font-bold text-green-700">{selectedItem.stokAwalBotol?.toLocaleString()} BOTOL</p>
                 )}
                 <p className="text-sm text-green-600">{selectedItem.stokAwalKG.toLocaleString()} KG</p>
               </div>
               <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
                 <p className="text-xs text-amber-600 uppercase tracking-wide font-semibold">Stok Barang Saat Ini</p>
-                {(selectedItem.unit === "ZAK" || selectedItem.unit === "DUS") && (
+                {selectedItem.unit !== "KG" && (
                   <p className="text-xl font-bold text-amber-700">{selectedItem.stokAkhirUnit?.toLocaleString()} {selectedItem.unit}</p>
-                )}
-                {selectedItem.unit === "BOTOL" && (
-                  <p className="text-xl font-bold text-amber-700">{selectedItem.stokAkhirBotol?.toLocaleString()} BOTOL</p>
                 )}
                 {selectedItem.unit === "KG" && (
                   <p className="text-xl font-bold text-amber-700">{selectedItem.stokAkhirKG.toLocaleString()} KG</p>
@@ -610,17 +584,17 @@ export default function LaporanStockGudangPage() {
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
                 <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Barang Masuk</p>
-                <p className="text-xl font-bold text-blue-700">+{selectedItem.barangMasukKG.toLocaleString()} KG</p>
-                {selectedItem.unit === "BOTOL" && (
-                  <p className="text-sm text-blue-600">+{selectedItem.barangMasukBotol?.toLocaleString()} BOTOL</p>
+                {selectedItem.unit !== "KG" && (
+                  <p className="text-xl font-bold text-blue-700">+{selectedItem.barangMasukUnit?.toLocaleString()} {selectedItem.unit}</p>
                 )}
+                <p className="text-sm text-blue-600">+{selectedItem.barangMasukKG.toLocaleString()} KG</p>
               </div>
               <div className="p-4 bg-red-50 rounded-xl border border-red-100">
                 <p className="text-xs text-red-600 uppercase tracking-wide font-semibold">Barang Keluar</p>
-                <p className="text-xl font-bold text-red-700">-{selectedItem.barangKeluarKG.toLocaleString()} KG</p>
-                {selectedItem.unit === "BOTOL" && (
-                  <p className="text-sm text-red-600">-{selectedItem.barangKeluarBotol?.toLocaleString()} BOTOL</p>
+                {selectedItem.unit !== "KG" && (
+                  <p className="text-xl font-bold text-red-700">-{selectedItem.barangKeluarUnit?.toLocaleString()} {selectedItem.unit}</p>
                 )}
+                <p className="text-sm text-red-600">-{selectedItem.barangKeluarKG.toLocaleString()} KG</p>
               </div>
               <div className={`p-4 rounded-xl border ${
                 selectedItem.stokAkhirKG < 1000
@@ -709,21 +683,12 @@ export default function LaporanStockGudangPage() {
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            {(editForm.unit === "ZAK" || editForm.unit === "DUS") && (
+            {editForm.unit !== "KG" && (
               <Input
                 label={`Stok Awal (${editForm.unit})`}
                 type="number"
                 value={editForm.stokAwalUnit}
                 onChange={(e) => setEditForm((prev) => ({ ...prev, stokAwalUnit: e.target.value }))}
-                required
-              />
-            )}
-            {editForm.unit === "BOTOL" && (
-              <Input
-                label="Stok Awal (BOTOL)"
-                type="number"
-                value={editForm.stokAwalBotol}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, stokAwalBotol: e.target.value }))}
                 required
               />
             )}
@@ -737,6 +702,15 @@ export default function LaporanStockGudangPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            {editForm.unit !== "KG" && (
+              <Input
+                label={`Barang Masuk (${editForm.unit})`}
+                type="number"
+                value={editForm.barangMasukUnit}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, barangMasukUnit: e.target.value }))}
+                required
+              />
+            )}
             <Input
               label="Barang Masuk (KG)"
               type="number"
@@ -744,18 +718,18 @@ export default function LaporanStockGudangPage() {
               onChange={(e) => setEditForm((prev) => ({ ...prev, barangMasukKG: e.target.value }))}
               required
             />
-            {editForm.unit === "BOTOL" && (
-              <Input
-                label="Barang Masuk (BOTOL)"
-                type="number"
-                value={editForm.barangMasukBotol}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, barangMasukBotol: e.target.value }))}
-                required
-              />
-            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            {editForm.unit !== "KG" && (
+              <Input
+                label={`Barang Keluar (${editForm.unit})`}
+                type="number"
+                value={editForm.barangKeluarUnit}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, barangKeluarUnit: e.target.value }))}
+                required
+              />
+            )}
             <Input
               label="Barang Keluar (KG)"
               type="number"
@@ -763,15 +737,6 @@ export default function LaporanStockGudangPage() {
               onChange={(e) => setEditForm((prev) => ({ ...prev, barangKeluarKG: e.target.value }))}
               required
             />
-            {editForm.unit === "BOTOL" && (
-              <Input
-                label="Barang Keluar (BOTOL)"
-                type="number"
-                value={editForm.barangKeluarBotol}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, barangKeluarBotol: e.target.value }))}
-                required
-              />
-            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -781,14 +746,12 @@ export default function LaporanStockGudangPage() {
             </div>
             <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
               <p className="text-xs text-amber-600 uppercase tracking-wide font-semibold">
-                {editForm.unit === "BOTOL" ? "Stok Akhir (BOTOL)" : `Stok Barang (${editForm.unit})`}
+                {editForm.unit === "KG" ? "Stok (KG)" : `Stok Barang (${editForm.unit})`}
               </p>
               <p className="text-2xl font-bold text-amber-700 font-mono">
-                {editForm.unit === "BOTOL"
-                  ? editPreview.stokAkhirBotol.toLocaleString()
-                  : editPreview.stokAkhirUnit.toLocaleString()}
+                {editForm.unit === "KG" ? editPreview.stokAkhirKG.toLocaleString() : editPreview.stokAkhirUnit.toLocaleString()}
               </p>
-              {editForm.unit !== "KG" && editForm.unit !== "BOTOL" && (
+              {editForm.unit !== "KG" && (
                 <p className="text-xs text-amber-500 mt-1">1 {editForm.unit} = {editForm.bobotPerUnit || 50} KG</p>
               )}
             </div>

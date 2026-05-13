@@ -159,11 +159,8 @@ export default function PublicPage() {
       width: "160px",
       render: (row: StockGudang) => (
         <div className="text-sm">
-          {(row.unit === "ZAK" || row.unit === "DUS") && (
+          {row.unit !== "KG" && (
             <p className="font-mono">{row.stokAwalUnit?.toLocaleString()} {row.unit}</p>
-          )}
-          {row.unit === "BOTOL" && (
-            <p className="font-mono">{row.stokAwalBotol?.toLocaleString()} BOTOL</p>
           )}
           <p className="text-gray-500 text-xs">{row.stokAwalKG.toLocaleString()} KG</p>
         </div>
@@ -175,10 +172,10 @@ export default function PublicPage() {
       width: "140px",
       render: (row: StockGudang) => (
         <div className="text-sm">
-          <span className="text-green-600 font-mono">+{row.barangMasukKG.toLocaleString()} KG</span>
-          {row.unit === "BOTOL" && (
-            <p className="text-green-500 font-mono text-xs">+{row.barangMasukBotol?.toLocaleString()} BOTOL</p>
+          {row.unit !== "KG" && (
+            <p className="text-green-600 font-mono">+{row.barangMasukUnit?.toLocaleString()} {row.unit}</p>
           )}
+          <p className="text-green-500 text-xs">+{row.barangMasukKG.toLocaleString()} KG</p>
         </div>
       ),
     },
@@ -188,10 +185,10 @@ export default function PublicPage() {
       width: "140px",
       render: (row: StockGudang) => (
         <div className="text-sm">
-          <span className="text-red-600 font-mono">-{row.barangKeluarKG.toLocaleString()} KG</span>
-          {row.unit === "BOTOL" && (
-            <p className="text-red-500 font-mono text-xs">-{row.barangKeluarBotol?.toLocaleString()} BOTOL</p>
+          {row.unit !== "KG" && (
+            <p className="text-red-600 font-mono">-{row.barangKeluarUnit?.toLocaleString()} {row.unit}</p>
           )}
+          <p className="text-red-500 text-xs">-{row.barangKeluarKG.toLocaleString()} KG</p>
         </div>
       ),
     },
@@ -201,11 +198,8 @@ export default function PublicPage() {
       width: "160px",
       render: (row: StockGudang) => (
         <div className="text-sm">
-          {(row.unit === "ZAK" || row.unit === "DUS") && (
+          {row.unit !== "KG" && (
             <p className="font-mono font-bold text-green-700">{row.stokAkhirUnit?.toLocaleString()} {row.unit}</p>
-          )}
-          {row.unit === "BOTOL" && (
-            <p className="font-mono font-bold text-pink-700">{row.stokAkhirBotol?.toLocaleString()} BOTOL</p>
           )}
           {row.unit === "KG" && (
             <p className="font-mono font-bold text-green-700">{row.stokAkhirKG.toLocaleString()} KG</p>
@@ -220,12 +214,6 @@ export default function PublicPage() {
     return filteredData
       .filter((d) => d.unit === unitType)
       .reduce((sum, d) => sum + (d.stokAkhirUnit || 0), 0);
-  };
-
-  const getTotalBotol = () => {
-    return filteredData
-      .filter((d) => d.unit === "BOTOL")
-      .reduce((sum, d) => sum + (d.stokAkhirBotol || 0), 0);
   };
 
   return (
@@ -334,7 +322,7 @@ export default function PublicPage() {
               </div>
               <div className="p-4 bg-pink-50 rounded-xl border border-pink-100">
                 <p className="text-xs text-pink-600 uppercase tracking-wide font-semibold">Total BOTOL</p>
-                <p className="text-2xl font-bold text-pink-700 mt-1">{getTotalBotol().toLocaleString()}</p>
+                <p className="text-2xl font-bold text-pink-700 mt-1">{getTotalUnit("BOTOL").toLocaleString()}</p>
               </div>
               <div className="p-4 bg-red-50 rounded-xl border border-red-100">
                 <p className="text-xs text-red-600 uppercase tracking-wide font-semibold">Stock Menipis</p>

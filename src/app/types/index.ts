@@ -18,13 +18,15 @@ export interface ProformaInvoice {
   barangDiambil: number;
   sisaBarang: number;
   kodeBeritaAcara: string;
-  fileBeritaAcaraURL: string;
+  fileBeritaAcara: string;
+  fileBeritaAcaraName: string;
   kodeInvoice: string;
-  fileInvoiceURL: string;
+  fileInvoice: string;
+  fileInvoiceName: string;
   keterangan: string;
   createdBy: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface StockGudang {
@@ -36,14 +38,12 @@ export interface StockGudang {
   bobotPerUnit: number;
   stokAwalUnit?: number;
   stokAwalKG: number;
-  stokAwalBotol?: number;
+  barangMasukUnit?: number;
   barangMasukKG: number;
-  barangMasukBotol?: number;
+  barangKeluarUnit?: number;
   barangKeluarKG: number;
-  barangKeluarBotol?: number;
-  stokAkhirKG: number;
   stokAkhirUnit?: number;
-  stokAkhirBotol?: number;
+  stokAkhirKG: number;
   createdBy: string;
   createdAt?: Date;
   updatedAt?: Date;
