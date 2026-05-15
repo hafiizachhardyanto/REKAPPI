@@ -131,19 +131,17 @@ export default function LaporanInputStockGudangPage() {
     setSuccessMessage("");
 
     try {
-      const isUnitBased = formData.unit === "ZAK" || formData.unit === "DUS" || formData.unit === "BOTOL";
       const isBotol = formData.unit === "BOTOL";
       const isKG = formData.unit === "KG";
+      const isZAK = formData.unit === "ZAK";
       const stokTersediaUnit = parseFloat(formData.stokTersediaUnit) || 0;
       const bobotPerUnit = isBotol ? 50 : (parseFloat(formData.bobotPerUnit) || 50);
       const botolPerDus = isBotol ? parseFloat(formData.botolPerDus) || 20 : null;
 
       const hitungStokAwalKG = () => {
         if (isKG) return 0;
-        if (isBotol) {
-          return stokTersediaUnit * (botolPerDus || 20) * 0.05;
-        }
-        return stokTersediaUnit * bobotPerUnit;
+        if (isZAK) return stokTersediaUnit * bobotPerUnit;
+        return 0;
       };
 
       const stokAwalKG = hitungStokAwalKG();
@@ -292,19 +290,17 @@ export default function LaporanInputStockGudangPage() {
   };
 
   const hitungStokAwalKG = (row: StockGudang) => {
-    if (row.unit === "KG") return row.stokAwalKG || 0;
-    if (row.unit === "BOTOL") {
-      return (row.stokAwalUnit || 0) * (row.botolPerDus || 20) * 0.05;
+    if (row.unit === "ZAK") {
+      return (row.stokAwalUnit || 0) * (row.bobotPerUnit || 50);
     }
-    return (row.stokAwalUnit || 0) * (row.bobotPerUnit || 50);
+    return row.stokAwalKG || 0;
   };
 
   const hitungStokAkhirKG = (row: StockGudang) => {
-    if (row.unit === "KG") return row.stokAkhirKG || 0;
-    if (row.unit === "BOTOL") {
-      return (row.stokAkhirUnit || 0) * (row.botolPerDus || 20) * 0.05;
+    if (row.unit === "ZAK") {
+      return (row.stokAkhirUnit || 0) * (row.bobotPerUnit || 50);
     }
-    return (row.stokAkhirUnit || 0) * (row.bobotPerUnit || 50);
+    return row.stokAkhirKG || 0;
   };
 
   const columns = [

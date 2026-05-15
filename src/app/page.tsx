@@ -157,19 +157,17 @@ export default function DashboardPage() {
   };
 
   const hitungStokAwalKG = (stock: StockGudang) => {
-    if (stock.unit === "KG") return stock.stokAwalKG || 0;
-    if (stock.unit === "BOTOL") {
-      return (stock.stokAwalUnit || 0) * (stock.botolPerDus || 20) * 0.05;
+    if (stock.unit === "ZAK") {
+      return (stock.stokAwalUnit || 0) * (stock.bobotPerUnit || 50);
     }
-    return (stock.stokAwalUnit || 0) * (stock.bobotPerUnit || 50);
+    return stock.stokAwalKG || 0;
   };
 
   const hitungStokAkhirKG = (stock: StockGudang) => {
-    if (stock.unit === "KG") return stock.stokAkhirKG || 0;
-    if (stock.unit === "BOTOL") {
-      return (stock.stokAkhirUnit || 0) * (stock.botolPerDus || 20) * 0.05;
+    if (stock.unit === "ZAK") {
+      return (stock.stokAkhirUnit || 0) * (stock.bobotPerUnit || 50);
     }
-    return (stock.stokAkhirUnit || 0) * (stock.bobotPerUnit || 50);
+    return stock.stokAkhirKG || 0;
   };
 
   const getStockStatus = (stock: StockGudang) => {
