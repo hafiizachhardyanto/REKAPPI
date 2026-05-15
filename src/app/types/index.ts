@@ -7,6 +7,12 @@ export interface Karyawan {
   createdAt: Date;
 }
 
+export interface SopirNopolData {
+  namaSopir: string;
+  nopol: string;
+  nomorSIM?: string;
+}
+
 export interface ProformaInvoice {
   id: string;
   tanggal: string;

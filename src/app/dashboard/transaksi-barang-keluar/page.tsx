@@ -25,7 +25,9 @@ interface StockOption {
 
 interface SopirNopolItem {
   id: number;
-  value: string;
+  namaSopir: string;
+  nopol: string;
+  nomorSIM: string;
 }
 
 export default function TransaksiBarangKeluarPage() {
@@ -51,7 +53,9 @@ export default function TransaksiBarangKeluarPage() {
     fot: "",
   });
 
-  const [sopirNopolList, setSopirNopolList] = useState<SopirNopolItem[]>([{ id: 1, value: "" }]);
+  const [sopirNopolList, setSopirNopolList] = useState<SopirNopolItem[]>([
+    { id: 1, namaSopir: "", nopol: "", nomorSIM: "" },
+  ]);
   const [selectedStock, setSelectedStock] = useState<StockOption | null>(null);
 
   useEffect(() => {
@@ -138,9 +142,9 @@ export default function TransaksiBarangKeluarPage() {
     }
   };
 
-  const handleSopirNopolChange = (id: number, value: string) => {
+  const handleSopirChange = (id: number, field: "namaSopir" | "nopol" | "nomorSIM", value: string) => {
     setSopirNopolList((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, value } : item))
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
     if (errors.sopirNopol) {
       setErrors((prev) => {
@@ -153,7 +157,7 @@ export default function TransaksiBarangKeluarPage() {
 
   const addSopirNopol = () => {
     const newId = sopirNopolList.length > 0 ? Math.max(...sopirNopolList.map((s) => s.id)) + 1 : 1;
-    setSopirNopolList((prev) => [...prev, { id: newId, value: "" }]);
+    setSopirNopolList((prev) => [...prev, { id: newId, namaSopir: "", nopol: "", nomorSIM: "" }]);
   };
 
   const removeSopirNopol = (id: number) => {
@@ -173,8 +177,8 @@ export default function TransaksiBarangKeluarPage() {
     if (!formData.nomorSuratPengangkutan.trim()) newErrors.nomorSuratPengangkutan = "Nomor Surat Pengangkutan wajib diisi";
     if (!formData.fot.trim()) newErrors.fot = "FOT wajib dipilih";
 
-    const validSopir = sopirNopolList.filter((s) => s.value.trim());
-    if (validSopir.length === 0) newErrors.sopirNopol = "Minimal satu Sopir/Nopol wajib diisi";
+    const validSopir = sopirNopolList.filter((s) => s.namaSopir.trim() && s.nopol.trim());
+    if (validSopir.length === 0) newErrors.sopirNopol = "Minimal satu Sopir dan Nopol wajib diisi";
 
     if (formData.unit === "BOTOL") {
       if (!formData.botolPerDus || parseFloat(formData.botolPerDus) <= 0) newErrors.botolPerDus = "Botol per DUS tidak valid";
@@ -233,8 +237,12 @@ export default function TransaksiBarangKeluarPage() {
       }
 
       const sopirNopolValues = sopirNopolList
-        .filter((s) => s.value.trim())
-        .map((s) => s.value.trim());
+        .filter((s) => s.namaSopir.trim() && s.nopol.trim())
+        .map((s) => ({
+          namaSopir: s.namaSopir.trim(),
+          nopol: s.nopol.trim(),
+          nomorSIM: s.nomorSIM.trim() || null,
+        }));
 
       const transaksiData: any = {
         tanggal: formData.tanggal,
@@ -301,7 +309,7 @@ export default function TransaksiBarangKeluarPage() {
         nomorSuratPengangkutan: "",
         fot: "",
       });
-      setSopirNopolList([{ id: 1, value: "" }]);
+      setSopirNopolList([{ id: 1, namaSopir: "", nopol: "", nomorSIM: "" }]);
       setSelectedStock(null);
 
       fetchStockGudang();
@@ -502,30 +510,50 @@ export default function TransaksiBarangKeluarPage() {
         </Card>
 
         <Card title="Sopir & Nopol">
-          <div className="space-y-4">
+          <div className="space-y-6">
             {sopirNopolList.map((item, index) => (
-              <div key={item.id} className="flex items-center gap-3">
-                <div className="flex-1">
+              <div key={item.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-gray-700">
+                    {index === 0 ? "Sopir & Kendaraan Utama" : `Sopir & Kendaraan ${index + 1}`}
+                  </h4>
+                  {sopirNopolList.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeSopirNopol(item.id)}
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Input
-                    label={index === 0 ? "Sopir / Nopol" : `Sopir / Nopol ${index + 1}`}
+                    label="Nama Sopir"
                     type="text"
-                    value={item.value}
-                    onChange={(e) => handleSopirNopolChange(item.id, e.target.value)}
-                    placeholder="Contoh: Budi / B 1234 ABC"
+                    value={item.namaSopir}
+                    onChange={(e) => handleSopirChange(item.id, "namaSopir", e.target.value)}
+                    placeholder="Contoh: Budi Santoso"
                     required={index === 0}
                   />
+                  <Input
+                    label="Nomor Polisi"
+                    type="text"
+                    value={item.nopol}
+                    onChange={(e) => handleSopirChange(item.id, "nopol", e.target.value)}
+                    placeholder="Contoh: B 1234 ABC"
+                    required={index === 0}
+                  />
+                  <Input
+                    label="Nomor SIM (Opsional)"
+                    type="text"
+                    value={item.nomorSIM}
+                    onChange={(e) => handleSopirChange(item.id, "nomorSIM", e.target.value)}
+                    placeholder="Contoh: 1234567890"
+                  />
                 </div>
-                {sopirNopolList.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeSopirNopol(item.id)}
-                    className="mt-6 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                )}
               </div>
             ))}
             {errors.sopirNopol && (
@@ -540,7 +568,7 @@ export default function TransaksiBarangKeluarPage() {
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Tambah Sopir/Nopol
+              Tambah Sopir & Kendaraan
             </Button>
           </div>
         </Card>
@@ -600,7 +628,7 @@ export default function TransaksiBarangKeluarPage() {
                 nomorSuratPengangkutan: "",
                 fot: "",
               });
-              setSopirNopolList([{ id: 1, value: "" }]);
+              setSopirNopolList([{ id: 1, namaSopir: "", nopol: "", nomorSIM: "" }]);
               setSelectedStock(null);
               setErrors({});
             }}
