@@ -138,6 +138,18 @@ export default function LaporanInputStockGudangPage() {
       const bobotPerUnit = isBotol ? 50 : (parseFloat(formData.bobotPerUnit) || 50);
       const botolPerDus = isBotol ? parseFloat(formData.botolPerDus) || 20 : null;
 
+      const hitungStokAwalKG = () => {
+        if (isKG) return 0;
+        if (isBotol) {
+          return stokTersediaUnit * (botolPerDus || 20) * 0.05;
+        }
+        return stokTersediaUnit * bobotPerUnit;
+      };
+
+      const stokAwalKG = hitungStokAwalKG();
+      const stokAkhirUnit = isKG ? 0 : stokTersediaUnit;
+      const stokAkhirKG = stokAwalKG;
+
       if (isEditing && editId) {
         const docData: any = {
           fot: formData.fot.trim().toUpperCase(),
@@ -163,13 +175,13 @@ export default function LaporanInputStockGudangPage() {
           unit: formData.unit,
           bobotPerUnit: bobotPerUnit,
           stokAwalUnit: isKG ? 0 : stokTersediaUnit,
-          stokAwalKG: 0,
+          stokAwalKG: stokAwalKG,
           barangMasukUnit: 0,
           barangMasukKG: 0,
           barangKeluarUnit: 0,
           barangKeluarKG: 0,
-          stokAkhirUnit: isKG ? 0 : stokTersediaUnit,
-          stokAkhirKG: 0,
+          stokAkhirUnit: stokAkhirUnit,
+          stokAkhirKG: stokAkhirKG,
           createdBy: user?.nama || "",
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -274,6 +286,27 @@ export default function LaporanInputStockGudangPage() {
 
   const uniqueFotList = Array.from(new Set(stockList.map((s) => s.fot))).sort();
 
+  const getDisplayUnitLabel = (unit: string) => {
+    if (unit === "BOTOL") return "ZAK";
+    return unit;
+  };
+
+  const hitungStokAwalKG = (row: StockGudang) => {
+    if (row.unit === "KG") return row.stokAwalKG || 0;
+    if (row.unit === "BOTOL") {
+      return (row.stokAwalUnit || 0) * (row.botolPerDus || 20) * 0.05;
+    }
+    return (row.stokAwalUnit || 0) * (row.bobotPerUnit || 50);
+  };
+
+  const hitungStokAkhirKG = (row: StockGudang) => {
+    if (row.unit === "KG") return row.stokAkhirKG || 0;
+    if (row.unit === "BOTOL") {
+      return (row.stokAkhirUnit || 0) * (row.botolPerDus || 20) * 0.05;
+    }
+    return (row.stokAkhirUnit || 0) * (row.bobotPerUnit || 50);
+  };
+
   const columns = [
     {
       key: "fot",
@@ -350,10 +383,10 @@ export default function LaporanInputStockGudangPage() {
         <div className="text-xs">
           {row.unit !== "KG" && (
             <p className="font-mono text-gray-600">
-              {row.stokAwalUnit?.toLocaleString()} {row.unit === "BOTOL" ? "ZAK" : row.unit}
+              {row.stokAwalUnit?.toLocaleString()} {getDisplayUnitLabel(row.unit)}
             </p>
           )}
-          <p className="font-mono text-gray-500">{row.stokAwalKG?.toLocaleString()} KG</p>
+          <p className="font-mono text-gray-500">{hitungStokAwalKG(row).toLocaleString()} KG</p>
         </div>
       ),
     },
@@ -365,7 +398,7 @@ export default function LaporanInputStockGudangPage() {
         <div className="text-xs">
           {row.unit !== "KG" && (
             <p className="font-mono text-green-600">
-              +{row.barangMasukUnit?.toLocaleString()} {row.unit === "BOTOL" ? "ZAK" : row.unit}
+              +{row.barangMasukUnit?.toLocaleString()} {getDisplayUnitLabel(row.unit)}
             </p>
           )}
           <p className="font-mono text-green-500">+{row.barangMasukKG?.toLocaleString()} KG</p>
@@ -380,7 +413,7 @@ export default function LaporanInputStockGudangPage() {
         <div className="text-xs">
           {row.unit !== "KG" && (
             <p className="font-mono text-red-600">
-              -{row.barangKeluarUnit?.toLocaleString()} {row.unit === "BOTOL" ? "ZAK" : row.unit}
+              -{row.barangKeluarUnit?.toLocaleString()} {getDisplayUnitLabel(row.unit)}
             </p>
           )}
           <p className="font-mono text-red-500">-{row.barangKeluarKG?.toLocaleString()} KG</p>
@@ -395,12 +428,10 @@ export default function LaporanInputStockGudangPage() {
         <div className="text-sm">
           {row.unit !== "KG" && (
             <p className="font-mono font-bold text-green-700">
-              {row.unit === "BOTOL"
-                ? `${row.stokAkhirUnit?.toLocaleString()} ZAK`
-                : `${row.stokAkhirUnit?.toLocaleString()} ${row.unit}`}
+              {row.stokAkhirUnit?.toLocaleString()} {getDisplayUnitLabel(row.unit)}
             </p>
           )}
-          <p className="font-mono font-bold text-green-600">{row.stokAkhirKG?.toLocaleString()} KG</p>
+          <p className="font-mono font-bold text-green-600">{hitungStokAkhirKG(row).toLocaleString()} KG</p>
         </div>
       ),
     },
