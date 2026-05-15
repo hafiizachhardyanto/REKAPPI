@@ -4,14 +4,12 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, getDocs, query, orderBy, limit, where, Timestamp } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
-import { useAuth } from "@/app/context/AuthContext";
 import Header from "@/app/components/ui/Header";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import { ProformaInvoice, StockGudang } from "@/app/types";
 
 export default function DashboardPage() {
-  const { user } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState({
     totalPI: 0,
@@ -269,8 +267,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <Header
-        title={`Selamat Datang, ${user?.nama}`}
-        subtitle="Dashboard Administrasi PT Bukit Agrochemical Baru"
+        title="Dashboard Stock Gudang"
+        subtitle="PT Bukit Agrochemical Baru - Laporan Stock Real-time"
       />
 
       <Card className="bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200">
