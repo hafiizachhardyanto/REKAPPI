@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, getDoc, where } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
 import Header from "@/app/components/ui/Header";
@@ -50,6 +50,13 @@ export default function TransaksiBarangMasukPage() {
   ]);
 
   const [matchedStock, setMatchedStock] = useState<StockItem | null>(null);
+  const [showNewStockModal, setShowNewStockModal] = useState(false);
+  const [newStockData, setNewStockData] = useState({
+    bobotPerUnit: "50",
+    stokTersediaUnit: "",
+    botolPerDus: "20",
+    volumeMl: "500",
+  });
 
   useEffect(() => {
     fetchStockGudang();
@@ -66,7 +73,7 @@ export default function TransaksiBarangMasukPage() {
         unit: doc.data().unit || "ZAK",
         fot: doc.data().fot || "",
         bobotPerUnit: doc.data().bobotPerUnit || 50,
-        botolPerDus: doc.data().botolPerDus,
+        botolPerDus: doc.data().botolPerDus ?? undefined,
         stokAkhirUnit: doc.data().stokAkhirUnit || 0,
         stokAkhirKG: doc.data().stokAkhirKG || 0,
       } as StockItem));
@@ -151,10 +158,129 @@ export default function TransaksiBarangMasukPage() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const validateNewStockForm = () => {
+    const newErrors: Record<string, string> = {};
+    const isUnitBased = formData.unit === "ZAK" || formData.unit === "DUS" || formData.unit === "BOTOL";
+    const isBotol = formData.unit === "BOTOL";
+
+    if (isUnitBased && !isBotol) {
+      if (!newStockData.bobotPerUnit || parseFloat(newStockData.bobotPerUnit) <= 0)
+        newErrors.bobotPerUnit = "Bobot per unit tidak valid";
+    }
+
+    if (!newStockData.stokTersediaUnit || isNaN(parseFloat(newStockData.stokTersediaUnit)))
+      newErrors.stokTersediaUnit = "Stok tersedia tidak valid";
+
+    if (isBotol) {
+      if (!newStockData.botolPerDus || parseFloat(newStockData.botolPerDus) <= 0)
+        newErrors.botolPerDus = "Jumlah botol per dus tidak valid";
+      if (!newStockData.volumeMl || parseFloat(newStockData.volumeMl) <= 0)
+        newErrors.volumeMl = "Volume tidak valid";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const createNewStockInGudang = async () => {
+    if (!validateNewStockForm()) return false;
+
+    try {
+      const isBotol = formData.unit === "BOTOL";
+      const isKG = formData.unit === "KG";
+      const isZAK = formData.unit === "ZAK";
+      const stokTersediaUnit = parseFloat(newStockData.stokTersediaUnit) || 0;
+      const bobotPerUnit = isBotol ? 50 : (parseFloat(newStockData.bobotPerUnit) || 50);
+      const botolPerDus = isBotol ? parseFloat(newStockData.botolPerDus) || 20 : null;
+
+      const hitungStokAwalKG = () => {
+        if (isKG) return 0;
+        if (isZAK) return stokTersediaUnit * bobotPerUnit;
+        return 0;
+      };
+
+      const stokAwalKG = hitungStokAwalKG();
+      const stokAkhirUnit = isKG ? 0 : stokTersediaUnit;
+      const stokAkhirKG = stokAwalKG;
+
+      const docData: any = {
+        fot: formData.fot.trim().toUpperCase(),
+        kodeBarang: formData.kodeBarang.trim().toUpperCase(),
+        namaBarang: formData.namaBarang.trim(),
+        unit: formData.unit,
+        bobotPerUnit: bobotPerUnit,
+        stokAwalUnit: isKG ? 0 : stokTersediaUnit,
+        stokAwalKG: stokAwalKG,
+        barangMasukUnit: 0,
+        barangMasukKG: 0,
+        barangKeluarUnit: 0,
+        barangKeluarKG: 0,
+        stokAkhirUnit: stokAkhirUnit,
+        stokAkhirKG: stokAkhirKG,
+        createdBy: user?.nama || "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (isBotol) {
+        docData.botolPerDus = botolPerDus;
+        docData.volumeMl = parseFloat(newStockData.volumeMl) || 500;
+        docData.displayUnit = "ZAK";
+      }
+
+      const docRef = await addDoc(collection(db, "stockGudang"), docData);
+
+      const newStockItem: StockItem = {
+        id: docRef.id,
+        kodeBarang: formData.kodeBarang.trim().toUpperCase(),
+        namaBarang: formData.namaBarang.trim(),
+        unit: formData.unit,
+        fot: formData.fot.trim().toUpperCase(),
+        bobotPerUnit: bobotPerUnit,
+        botolPerDus: isBotol && botolPerDus !== null ? botolPerDus : undefined,
+        stokAkhirUnit: stokAkhirUnit,
+        stokAkhirKG: stokAkhirKG,
+      };
+
+      setMatchedStock(newStockItem);
+      setStockList((prev) => [...prev, newStockItem]);
+      setShowNewStockModal(false);
+      setNewStockData({
+        bobotPerUnit: "50",
+        stokTersediaUnit: "",
+        botolPerDus: "20",
+        volumeMl: "500",
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Error creating new stock:", error);
+      setErrors({ submit: "Gagal membuat data stock baru. Silakan coba lagi." });
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
+    const kodeNormalized = formData.kodeBarang.trim().toUpperCase();
+    const namaNormalized = formData.namaBarang.trim().toUpperCase();
+    const existingStock = stockList.find(
+      (s) =>
+        s.kodeBarang.toUpperCase() === kodeNormalized &&
+        s.namaBarang.toUpperCase() === namaNormalized
+    );
+
+    if (!existingStock) {
+      setShowNewStockModal(true);
+      return;
+    }
+
+    await processTransaksi();
+  };
+
+  const processTransaksi = async () => {
     setIsSubmitting(true);
     setSuccessMessage("");
 
@@ -255,7 +381,15 @@ export default function TransaksiBarangMasukPage() {
     }
   };
 
+  const handleCreateStockAndSubmit = async () => {
+    const success = await createNewStockInGudang();
+    if (success) {
+      await processTransaksi();
+    }
+  };
+
   const isBotol = formData.unit === "BOTOL";
+  const isUnitBased = formData.unit === "ZAK" || formData.unit === "DUS" || formData.unit === "BOTOL";
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -347,6 +481,17 @@ export default function TransaksiBarangMasukPage() {
               </p>
               <p className="text-xs text-blue-600 mt-1">
                 Unit, FOT, dan bobot otomatis disesuaikan dari data gudang
+              </p>
+            </div>
+          )}
+
+          {!matchedStock && formData.kodeBarang.trim() && formData.namaBarang.trim() && (
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-sm text-amber-700 font-medium">
+                Barang baru terdeteksi: Kode <span className="font-mono font-bold">{formData.kodeBarang}</span> belum terdaftar di stock gudang
+              </p>
+              <p className="text-xs text-amber-600 mt-1">
+                Data akan otomatis ditambahkan ke laporan stock gudang saat transaksi disimpan
               </p>
             </div>
           )}
@@ -465,6 +610,108 @@ export default function TransaksiBarangMasukPage() {
           </Button>
         </div>
       </form>
+
+      {showNewStockModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-indigo-100 rounded-full">
+                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Tambah Stock Baru ke Gudang</h3>
+                <p className="text-sm text-gray-500">Kode <span className="font-mono font-bold text-indigo-600">{formData.kodeBarang}</span> belum terdaftar</p>
+              </div>
+            </div>
+
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-700"><span className="font-semibold">Nama Barang:</span> {formData.namaBarang}</p>
+              <p className="text-sm text-gray-700"><span className="font-semibold">Unit:</span> {formData.unit}</p>
+              <p className="text-sm text-gray-700"><span className="font-semibold">FOT:</span> {formData.fot}</p>
+            </div>
+
+            <div className="space-y-4">
+              {isUnitBased && !isBotol && (
+                <Input
+                  label="Bobot Per Unit (KG)"
+                  type="number"
+                  name="bobotPerUnit"
+                  value={newStockData.bobotPerUnit}
+                  onChange={(e) => setNewStockData((prev) => ({ ...prev, bobotPerUnit: e.target.value }))}
+                  placeholder="Contoh: 50"
+                  error={errors.bobotPerUnit}
+                  required
+                />
+              )}
+
+              {isBotol && (
+                <>
+                  <Input
+                    label="Botol Per DUS"
+                    type="number"
+                    name="botolPerDus"
+                    value={newStockData.botolPerDus}
+                    onChange={(e) => setNewStockData((prev) => ({ ...prev, botolPerDus: e.target.value }))}
+                    placeholder="Contoh: 20"
+                    error={errors.botolPerDus}
+                    required
+                  />
+                  <Input
+                    label="Volume (ml)"
+                    type="number"
+                    name="volumeMl"
+                    value={newStockData.volumeMl}
+                    onChange={(e) => setNewStockData((prev) => ({ ...prev, volumeMl: e.target.value }))}
+                    placeholder="Contoh: 500"
+                    error={errors.volumeMl}
+                    required
+                  />
+                </>
+              )}
+
+              <Input
+                label={`Stok Tersedia (${isBotol ? "ZAK" : formData.unit})`}
+                type="number"
+                name="stokTersediaUnit"
+                value={newStockData.stokTersediaUnit}
+                onChange={(e) => setNewStockData((prev) => ({ ...prev, stokTersediaUnit: e.target.value }))}
+                placeholder={`Masukkan stok awal dalam ${isBotol ? "ZAK" : formData.unit}`}
+                error={errors.stokTersediaUnit}
+                required
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowNewStockModal(false);
+                  setNewStockData({
+                    bobotPerUnit: "50",
+                    stokTersediaUnit: "",
+                    botolPerDus: "20",
+                    volumeMl: "500",
+                  });
+                  setErrors({});
+                }}
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleCreateStockAndSubmit}
+                isLoading={isSubmitting}
+              >
+                Simpan & Lanjutkan Transaksi
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
