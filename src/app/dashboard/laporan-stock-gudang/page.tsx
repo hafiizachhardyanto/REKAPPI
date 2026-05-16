@@ -11,6 +11,7 @@ import {
   doc,
   updateDoc,
   deleteDoc,
+  where,
 } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -47,6 +48,8 @@ export default function LaporanInputStockGudangPage() {
 
   const [fotList, setFotList] = useState<string[]>([]);
   const [isNewFot, setIsNewFot] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateKodeBarang, setDuplicateKodeBarang] = useState("");
 
   const unitOptions = [
     { value: "ZAK", label: "ZAK" },
@@ -66,7 +69,7 @@ export default function LaporanInputStockGudangPage() {
       const snapshot = await getDocs(q);
       const fotSet = new Set<string>();
       snapshot.docs.forEach((doc) => {
-        const fot = doc.data().fot;
+        const fot = doc.data().fod;
         if (fot && typeof fot === "string" && fot.trim()) {
           fotSet.add(fot.trim().toUpperCase());
         }
@@ -90,6 +93,50 @@ export default function LaporanInputStockGudangPage() {
       setStockList(data);
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const checkDuplicateKodeBarang = async (kodeBarang: string): Promise<boolean> => {
+    if (!kodeBarang.trim()) return false;
+
+    try {
+      const q = query(
+        collection(db, "stockGudang"),
+        where("kodeBarang", "==", kodeBarang.trim().toUpperCase())
+      );
+      const snapshot = await getDocs(q);
+
+      if (isEditing && editId) {
+        const duplicateDocs = snapshot.docs.filter((d) => d.id !== editId);
+        return duplicateDocs.length > 0;
+      }
+
+      return !snapshot.empty;
+    } catch (error) {
+      console.error("Error checking duplicate:", error);
+      return false;
+    }
+  };
+
+  const handleKodeBarangChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    if (errors[name]) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+
+    if (value.trim().length >= 3) {
+      const isDuplicate = await checkDuplicateKodeBarang(value);
+      if (isDuplicate) {
+        setDuplicateKodeBarang(value.trim().toUpperCase());
+        setShowDuplicateModal(true);
+        setFormData((prev) => ({ ...prev, kodeBarang: "" }));
+      }
     }
   };
 
@@ -129,6 +176,13 @@ export default function LaporanInputStockGudangPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
+
+    const isDuplicate = await checkDuplicateKodeBarang(formData.kodeBarang);
+    if (isDuplicate) {
+      setDuplicateKodeBarang(formData.kodeBarang.trim().toUpperCase());
+      setShowDuplicateModal(true);
+      return;
+    }
 
     setIsSubmitting(true);
     setSuccessMessage("");
@@ -257,6 +311,8 @@ export default function LaporanInputStockGudangPage() {
     setIsEditing(false);
     setEditId(null);
     setErrors({});
+    setShowDuplicateModal(false);
+    setDuplicateKodeBarang("");
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -549,7 +605,7 @@ export default function LaporanInputStockGudangPage() {
                   type="text"
                   name="kodeBarang"
                   value={formData.kodeBarang}
-                  onChange={handleChange}
+                  onChange={handleKodeBarangChange}
                   placeholder="Contoh: PUP-001"
                   error={errors.kodeBarang}
                   required
@@ -733,6 +789,37 @@ export default function LaporanInputStockGudangPage() {
                 onClick={() => handleDelete(showDeleteConfirm)}
               >
                 Hapus Data
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDuplicateModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-amber-100 rounded-full">
+                <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Kode Barang Sudah Ada</h3>
+            </div>
+            <p className="text-gray-600 mb-2">
+              Kode barang <span className="font-mono font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded">{duplicateKodeBarang}</span> sudah terdaftar di database.
+            </p>
+            <p className="text-gray-500 text-sm mb-6">
+              Silakan gunakan kode barang yang berbeda atau edit data yang sudah ada melalui tabel di samping.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="primary"
+                className="bg-amber-600 hover:bg-amber-700"
+                onClick={() => setShowDuplicateModal(false)}
+              >
+                Mengerti
               </Button>
             </div>
           </div>
