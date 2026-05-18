@@ -83,7 +83,7 @@ export default function Sidebar() {
   };
 
   return (
-    <React.Fragment>
+    <>
       <button
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-green-800 text-white rounded-xl shadow-lg"
@@ -104,3 +104,50 @@ export default function Sidebar() {
         fixed lg:sticky top-0 left-0 z-40 h-screen bg-gradient-to-b from-green-900 to-green-800 text-white flex flex-col shadow-2xl
         transition-transform duration-300 ease-in-out
         w-72
+        ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+      `}
+      >
+        <div className="p-6 border-b border-green-700/50">
+          <h1 className="text-xl font-bold tracking-tight">REKAP PI</h1>
+          <p className="text-xs text-green-200 mt-1">Sistem Admin Distributor</p>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+          {menuItems.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`
+                  flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
+                  ${isActive ? "bg-green-700 text-white shadow-lg" : "text-green-100 hover:bg-green-800 hover:text-white"}
+                `}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-green-700/50">
+          <div className="mb-3 px-4 py-2 bg-green-800/50 rounded-xl">
+            <p className="text-xs text-green-200">Login sebagai</p>
+            <p className="text-sm font-semibold text-white truncate">{user?.username || "Admin"}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-200 hover:bg-red-900/30 hover:text-red-100 transition-all duration-200"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Keluar</span>
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
