@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -18,7 +18,6 @@ interface ProdukItem {
   kuantitas: string;
   satuan: string;
   hargaSatuan: string;
-  totalHarga: number;
 }
 
 interface TTDData {
@@ -55,18 +54,25 @@ export default function InputProformaInvoicePage() {
   });
 
   const [produkItems, setProdukItems] = useState<ProdukItem[]>([
-    { id: "1", namaProduk: "", fot: "", kuantitas: "", satuan: "KG", hargaSatuan: "", totalHarga: 0 },
+    { id: "1", namaProduk: "", fot: "", kuantitas: "", satuan: "KG", hargaSatuan: "" },
   ]);
+
+  const produkItemsRef = useRef(produkItems);
+  const formDataRef = useRef(formData);
+
+  useEffect(() => {
+    produkItemsRef.current = produkItems;
+  }, [produkItems]);
+
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   useEffect(() => {
     fetchStockGudang();
     fetchTTD();
     generateTanggalJatuhTempo();
   }, []);
-
-  useEffect(() => {
-    calculateTotals();
-  }, [produkItems, formData.uangMuka, formData.includePPN, formData.ongkosKirim]);
 
   const generateTanggalJatuhTempo = () => {
     const today = new Date();
@@ -128,35 +134,36 @@ export default function InputProformaInvoicePage() {
     if (num < 0) return "MINUS " + numberToWords(-num);
     let result = "";
     let i = 0;
-    while (num > 0) {
-      const chunk = num % 1000;
+    let tempNum = num;
+    while (tempNum > 0) {
+      const chunk = tempNum % 1000;
       if (chunk > 0) {
         let chunkWords = convertThreeDigits(chunk);
         if (i === 1 && chunk === 1) chunkWords = "SERIBU";
         else if (i > 0) chunkWords += " " + thousands[i];
         result = chunkWords + " " + result;
       }
-      num = Math.floor(num / 1000);
+      tempNum = Math.floor(tempNum / 1000);
       i++;
     }
     return result.trim() + " RUPIAH";
   };
 
-  const calculateTotals = () => {
+  const calculateTotals = useCallback(() => {
+    const currentItems = produkItemsRef.current;
+    const currentForm = formDataRef.current;
+
     let subtotal = 0;
-    const updatedItems = produkItems.map((item) => {
+    currentItems.forEach((item) => {
       const qty = parseFloat(item.kuantitas) || 0;
       const price = parseFloat(item.hargaSatuan) || 0;
-      const total = qty * price;
-      subtotal += total;
-      return { ...item, totalHarga: total };
+      subtotal += qty * price;
     });
-    setProdukItems(updatedItems);
 
-    const uangMuka = parseFloat(formData.uangMuka) || 0;
-    const ongkosKirim = parseFloat(formData.ongkosKirim) || 0;
+    const uangMuka = parseFloat(currentForm.uangMuka) || 0;
+    const ongkosKirim = parseFloat(currentForm.ongkosKirim) || 0;
     let ppn = 0;
-    if (formData.includePPN) {
+    if (currentForm.includePPN) {
       ppn = subtotal * 0.11;
     }
     const jumlahTertagih = subtotal - uangMuka + ppn + ongkosKirim;
@@ -169,7 +176,7 @@ export default function InputProformaInvoicePage() {
       jumlahTertagih,
       terbilang,
     }));
-  };
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -186,38 +193,47 @@ export default function InputProformaInvoicePage() {
         return newErrors;
       });
     }
+    setTimeout(() => calculateTotals(), 0);
   };
 
   const handleProdukChange = (id: string, field: string, value: string) => {
-    setProdukItems((prev) =>
-      prev.map((item) => {
+    setProdukItems((prev) => {
+      return prev.map((item) => {
         if (item.id === id) {
-          const updated = { ...item, [field]: value };
+          const newItem = { ...item, [field]: value };
           if (field === "namaProduk") {
             const stock = stockList.find((s) => s.namaBarang === value);
             if (stock) {
-              updated.fot = stock.fot || "";
+              newItem.fot = stock.fot || "";
             }
           }
-          return updated;
+          return newItem;
         }
         return item;
-      })
-    );
+      });
+    });
+    setTimeout(() => calculateTotals(), 0);
   };
 
   const addProdukItem = () => {
-    const newId = (produkItems.length + 1).toString();
+    const newId = Date.now().toString();
     setProdukItems((prev) => [
       ...prev,
-      { id: newId, namaProduk: "", fot: "", kuantitas: "", satuan: "KG", hargaSatuan: "", totalHarga: 0 },
+      { id: newId, namaProduk: "", fot: "", kuantitas: "", satuan: "KG", hargaSatuan: "" },
     ]);
   };
 
   const removeProdukItem = (id: string) => {
     if (produkItems.length > 1) {
       setProdukItems((prev) => prev.filter((item) => item.id !== id));
+      setTimeout(() => calculateTotals(), 0);
     }
+  };
+
+  const getItemTotal = (item: ProdukItem): number => {
+    const qty = parseFloat(item.kuantitas) || 0;
+    const price = parseFloat(item.hargaSatuan) || 0;
+    return qty * price;
   };
 
   const validateForm = () => {
@@ -260,7 +276,7 @@ export default function InputProformaInvoicePage() {
           kuantitas: parseFloat(item.kuantitas),
           satuan: item.satuan,
           hargaSatuan: parseFloat(item.hargaSatuan),
-          totalHarga: item.totalHarga,
+          totalHarga: getItemTotal(item),
         })),
         uangMuka: parseFloat(formData.uangMuka) || 0,
         includePPN: formData.includePPN,
@@ -298,7 +314,7 @@ export default function InputProformaInvoicePage() {
         selectedTTD: "",
       });
       setProdukItems([
-        { id: "1", namaProduk: "", fot: "", kuantitas: "", satuan: "KG", hargaSatuan: "", totalHarga: 0 },
+        { id: "1", namaProduk: "", fot: "", kuantitas: "", satuan: "KG", hargaSatuan: "" },
       ]);
       generateTanggalJatuhTempo();
       setTimeout(() => setSuccessMessage(""), 5000);
@@ -430,7 +446,7 @@ export default function InputProformaInvoicePage() {
                         <input type="text" value={item.fot} onChange={(e) => handleProdukChange(item.id, "fot", e.target.value)} placeholder="FOT" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
                       </td>
                       <td className="px-4 py-3">
-                        <input type="number" step="0.01" value={item.kuantitas} onChange={(e) => handleProdukChange(item.id, "kuantitas", e.target.value)} placeholder="0.00" className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors[`kuantitas_${index}`] ? "border-red-500" : "border-gray-300"}`} />
+                        <input type="text" inputMode="decimal" value={item.kuantitas} onChange={(e) => handleProdukChange(item.id, "kuantitas", e.target.value)} placeholder="0.00" className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors[`kuantitas_${index}`] ? "border-red-500" : "border-gray-300"}`} />
                         {errors[`kuantitas_${index}`] && <p className="mt-1 text-xs text-red-600">{errors[`kuantitas_${index}`]}</p>}
                       </td>
                       <td className="px-4 py-3">
@@ -441,11 +457,11 @@ export default function InputProformaInvoicePage() {
                         </select>
                       </td>
                       <td className="px-4 py-3">
-                        <input type="number" step="0.01" value={item.hargaSatuan} onChange={(e) => handleProdukChange(item.id, "hargaSatuan", e.target.value)} placeholder="0.00" className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors[`harga_${index}`] ? "border-red-500" : "border-gray-300"}`} />
+                        <input type="text" inputMode="decimal" value={item.hargaSatuan} onChange={(e) => handleProdukChange(item.id, "hargaSatuan", e.target.value)} placeholder="0.00" className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors[`harga_${index}`] ? "border-red-500" : "border-gray-300"}`} />
                         {errors[`harga_${index}`] && <p className="mt-1 text-xs text-red-600">{errors[`harga_${index}`]}</p>}
                       </td>
                       <td className="px-4 py-3 text-sm font-mono font-medium text-gray-900">
-                        {formatRupiah(item.totalHarga)}
+                        {formatRupiah(getItemTotal(item))}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button type="button" onClick={() => removeProdukItem(item.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" disabled={produkItems.length === 1}>
@@ -487,7 +503,7 @@ export default function InputProformaInvoicePage() {
               )}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Uang Muka (Opsional)</label>
-                <input type="number" step="0.01" name="uangMuka" value={formData.uangMuka} onChange={handleChange} placeholder="0.00" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white" />
+                <input type="text" inputMode="decimal" name="uangMuka" value={formData.uangMuka} onChange={handleChange} placeholder="0.00" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white" />
               </div>
               {parseFloat(formData.uangMuka) > 0 && (
                 <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
@@ -497,7 +513,7 @@ export default function InputProformaInvoicePage() {
               )}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ongkos Kirim (Opsional)</label>
-                <input type="number" step="0.01" name="ongkosKirim" value={formData.ongkosKirim} onChange={handleChange} placeholder="0.00" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white" />
+                <input type="text" inputMode="decimal" name="ongkosKirim" value={formData.ongkosKirim} onChange={handleChange} placeholder="0.00" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white" />
               </div>
               {parseFloat(formData.ongkosKirim) > 0 && (
                 <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-100">
@@ -549,7 +565,7 @@ export default function InputProformaInvoicePage() {
               keterangan: "",
               selectedTTD: "",
             });
-            setProdukItems([{ id: "1", namaProduk: "", fot: "", kuantitas: "", satuan: "KG", hargaSatuan: "", totalHarga: 0 }]);
+            setProdukItems([{ id: "1", namaProduk: "", fot: "", kuantitas: "", satuan: "KG", hargaSatuan: "" }]);
             generateTanggalJatuhTempo();
             setErrors({});
           }}>
