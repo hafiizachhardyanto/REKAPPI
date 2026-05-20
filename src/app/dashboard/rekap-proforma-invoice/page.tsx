@@ -126,12 +126,24 @@ export default function RekapProformaInvoicePage() {
 
     const produkRows = (item.produkItems || []).map((p, idx) => `
       <tr>
-        <td style="text-align: center; padding: 8px 6px; font-size: 11px; border: 1px solid #000;">${idx + 1}</td>
-        <td style="padding: 8px 6px; font-size: 11px; border: 1px solid #000; font-weight: 600;">${p.namaProduk || ""}</td>
-        <td style="text-align: center; padding: 8px 6px; font-size: 11px; border: 1px solid #000;">${p.fot || ""}</td>
-        <td style="text-align: right; padding: 8px 6px; font-size: 11px; border: 1px solid #000;">${p.kuantitas?.toLocaleString("id-ID") || "0"} ${p.satuan || "KG"}</td>
-        <td style="text-align: right; padding: 8px 6px; font-size: 11px; border: 1px solid #000;">${formatRupiah(p.hargaSatuan)}</td>
-        <td style="text-align: right; padding: 8px 6px; font-size: 11px; border: 1px solid #000; font-weight: 600;">${formatRupiah(p.totalHarga)}</td>
+        <td style="text-align: center; padding: 5px 3px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">${idx + 1}</td>
+        <td style="padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600; height: 28px;">${p.namaProduk || ""}</td>
+        <td style="text-align: center; padding: 5px 3px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">${p.fot || ""}</td>
+        <td style="text-align: right; padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">${p.kuantitas?.toLocaleString("id-ID") || "0"}</td>
+        <td style="text-align: right; padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">${formatRupiah(p.hargaSatuan)}</td>
+        <td style="text-align: right; padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600; height: 28px;">${formatRupiah(p.totalHarga)}</td>
+      </tr>
+    `).join("");
+
+    const emptyRowsCount = Math.max(0, 10 - (item.produkItems || []).length);
+    const emptyRows = Array.from({ length: emptyRowsCount }, (_, i) => `
+      <tr>
+        <td style="text-align: center; padding: 5px 3px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">${(item.produkItems || []).length + i + 1}</td>
+        <td style="padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">&nbsp;</td>
+        <td style="text-align: center; padding: 5px 3px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">&nbsp;</td>
+        <td style="text-align: right; padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">&nbsp;</td>
+        <td style="text-align: right; padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">&nbsp;</td>
+        <td style="text-align: right; padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">&nbsp;</td>
       </tr>
     `).join("");
 
@@ -143,274 +155,264 @@ export default function RekapProformaInvoicePage() {
         <style>
           @page {
             size: A4;
-            margin: 15mm;
+            margin: 12mm 14mm 12mm 14mm;
           }
           @media print {
             body { margin: 0; padding: 0; }
             .no-print { display: none !important; }
-            .page { page-break-after: always; }
-            .page:last-child { page-break-after: auto; }
           }
-          * { box-sizing: border-box; }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
             background: white;
             color: #000;
-            font-size: 11px;
-            line-height: 1.4;
+            font-size: 10px;
+            line-height: 1.3;
           }
           .page {
-            width: 210mm;
-            min-height: 297mm;
-            padding: 15mm;
+            width: 182mm;
             margin: 0 auto;
             background: white;
-            position: relative;
           }
-          .header-top {
+
+          .header-row {
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
-            margin-bottom: 12px;
-            border-bottom: 2px solid #16a34a;
-            padding-bottom: 12px;
+            margin-bottom: 0;
           }
-          .logo-section {
+          .logo-area {
             display: flex;
-            align-items: center;
-            gap: 12px;
+            align-items: flex-start;
+            gap: 10px;
           }
           .logo-img {
-            height: 50px;
+            height: 52px;
             width: auto;
+            display: block;
           }
-          .company-info { text-align: left; }
-          .company-name {
-            font-size: 16px;
+          .company-text { padding-top: 2px; }
+          .company-title {
+            font-size: 15px;
             font-weight: bold;
-            color: #16a34a;
-            margin: 0;
-            letter-spacing: 1px;
-          }
-          .company-sub {
-            font-size: 10px;
             color: #333;
-            margin: 2px 0 0 0;
-            font-weight: 600;
+            margin: 0;
+            letter-spacing: 0.3px;
+          }
+          .company-subtitle {
+            font-size: 9px;
+            color: #16a34a;
+            margin: 1px 0 0 0;
+            font-weight: 700;
           }
           .company-address {
-            font-size: 9px;
-            color: #555;
-            margin: 3px 0 0 0;
+            font-size: 8px;
+            color: #16a34a;
+            margin: 2px 0 0 0;
+            font-style: italic;
           }
-          .qr-section { text-align: right; }
-          .qr-placeholder {
-            width: 50px;
-            height: 50px;
-            border: 1px solid #ccc;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 9px;
-            color: #999;
+          .qr-area { text-align: right; }
+          .qr-img {
+            width: 52px;
+            height: 52px;
+            display: block;
           }
-          .header-title {
+
+          .invoice-title {
             text-align: center;
-            margin: 16px 0;
-            padding: 8px 0;
-            background: #f0fdf4;
+            margin: 8px 0 10px 0;
+            padding: 5px 0;
+            background: #dcfce7;
             border-top: 2px solid #16a34a;
             border-bottom: 2px solid #16a34a;
           }
-          .header-title h1 {
+          .invoice-title h1 {
             color: #111;
-            font-size: 18px;
+            font-size: 15px;
             margin: 0;
             font-weight: bold;
-            letter-spacing: 4px;
+            letter-spacing: 3px;
           }
-          .info-grid {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 16px;
-          }
-          .info-box-left {
-            flex: 1;
-            border: 1px solid #000;
-            padding: 12px;
-            min-height: 90px;
-          }
-          .info-box-left .label {
-            font-size: 10px;
-            color: #333;
-            margin-bottom: 6px;
-          }
-          .info-box-left .customer-name {
-            font-size: 13px;
-            font-weight: 700;
-            color: #000;
-            margin: 0 0 4px 0;
-          }
-          .info-box-left .customer-address {
-            font-size: 10px;
-            color: #333;
-            line-height: 1.5;
-          }
-          .info-box-right {
-            width: 280px;
-          }
+
           .info-row {
             display: flex;
             justify-content: space-between;
-            padding: 5px 0;
-            border-bottom: 1px solid #ddd;
-            font-size: 10px;
+            gap: 0;
+            margin-bottom: 10px;
           }
-          .info-row:last-child { border-bottom: none; }
-          .info-label { color: #333; min-width: 120px; }
-          .info-value { color: #000; font-weight: 600; text-align: right; }
-          .info-colon { margin: 0 8px; }
+          .customer-info {
+            flex: 1;
+            border: 1px solid #000;
+            padding: 8px 10px;
+            min-height: 75px;
+          }
+          .customer-label {
+            font-size: 9px;
+            color: #333;
+            margin-bottom: 3px;
+          }
+          .customer-name {
+            font-size: 11px;
+            font-weight: 700;
+            color: #000;
+            margin: 0 0 3px 0;
+          }
+          .customer-address {
+            font-size: 9px;
+            color: #333;
+            line-height: 1.5;
+          }
+          .invoice-meta {
+            width: 250px;
+            padding: 0 0 0 10px;
+          }
+          .meta-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            font-size: 9px;
+            border-bottom: 1px solid #ddd;
+          }
+          .meta-row:last-child { border-bottom: none; }
+          .meta-label { color: #333; min-width: 90px; }
+          .meta-colon { margin: 0 3px; }
+          .meta-value { color: #000; font-weight: 600; text-align: right; flex: 1; }
 
-          table {
+          .data-table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 0;
-            font-size: 11px;
           }
-          th {
+          .data-table th {
             background: #ffedd5;
             color: #000;
-            font-size: 10px;
-            padding: 8px 6px;
+            font-size: 9px;
+            padding: 5px 3px;
             font-weight: 700;
             border: 1px solid #000;
             text-align: center;
           }
-          td {
+          .data-table td {
             border: 1px solid #000;
-            padding: 8px 6px;
+            padding: 5px 3px;
             vertical-align: top;
           }
 
-          .summary-section {
+          .summary-row {
             display: flex;
             border: 1px solid #000;
             border-top: none;
           }
-          .terbilang-box {
+          .terbilang-area {
             flex: 1;
-            padding: 12px;
+            padding: 8px 10px;
             border-right: 1px solid #000;
           }
-          .terbilang-label {
-            font-size: 10px;
+          .terbilang-title {
+            font-size: 9px;
             color: #333;
-            margin-bottom: 4px;
+            margin-bottom: 3px;
             font-weight: 600;
           }
-          .terbilang-value {
-            font-size: 11px;
+          .terbilang-text {
+            font-size: 10px;
             color: #000;
             font-weight: 700;
             text-transform: uppercase;
-            line-height: 1.5;
+            line-height: 1.4;
           }
-          .bank-info {
-            margin-top: 12px;
-            font-size: 9px;
+          .bank-details {
+            margin-top: 10px;
+            font-size: 8px;
             line-height: 1.6;
             color: #333;
           }
-          .bank-info strong { color: #000; }
-          .calculation-box {
-            width: 280px;
+          .bank-details strong { color: #000; font-size: 9px; }
+          .calc-area {
+            width: 250px;
             padding: 0;
           }
-          .calc-row {
+          .calc-line {
             display: flex;
             justify-content: space-between;
-            padding: 6px 12px;
+            padding: 3px 10px;
             border-bottom: 1px solid #ddd;
-            font-size: 10px;
+            font-size: 9px;
           }
-          .calc-row:last-child {
+          .calc-line:last-child {
             border-bottom: none;
             background: #f0fdf4;
-            border-top: 2px solid #16a34a;
-            padding: 8px 12px;
+            border-top: 1px solid #16a34a;
+            padding: 5px 10px;
           }
-          .calc-label { color: #333; }
-          .calc-label-total { font-weight: 700; color: #000; }
-          .calc-value { font-weight: 600; font-family: monospace; }
-          .calc-value-total { font-size: 12px; color: #16a34a; font-weight: 700; font-family: monospace; }
-          .jatuh-tempo {
-            padding: 6px 12px;
+          .calc-name { color: #333; }
+          .calc-name-bold { font-weight: 700; color: #000; }
+          .calc-amount { font-weight: 600; font-family: monospace; font-size: 9px; }
+          .calc-amount-bold { font-size: 10px; color: #000; font-weight: 700; font-family: monospace; }
+          .due-date {
+            padding: 3px 10px;
             text-align: right;
             border-top: 1px solid #ddd;
-            font-size: 10px;
+            font-size: 9px;
           }
-          .jatuh-tempo-label { color: #666; }
-          .jatuh-tempo-value { color: #dc2626; font-weight: 700; }
+          .due-label { color: #666; }
+          .due-value { color: #dc2626; font-weight: 700; }
 
-          .footer-grid {
+          .footer-row {
             display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            margin-top: 20px;
-          }
-          .bank-box {
-            flex: 1;
             border: 1px solid #000;
-            padding: 12px;
+            border-top: none;
           }
-          .bank-box-title {
-            font-size: 10px;
+          .footer-bank-area {
+            flex: 1;
+            padding: 8px 10px;
+            border-right: 1px solid #000;
+          }
+          .footer-bank-title {
+            font-size: 9px;
             font-weight: 700;
             color: #000;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
           }
-          .bank-box-content {
-            font-size: 9px;
-            line-height: 1.8;
+          .footer-bank-text {
+            font-size: 8px;
+            line-height: 1.6;
             color: #333;
           }
-          .ttd-box {
-            width: 200px;
-            border: 1px solid #000;
-            padding: 12px;
+          .footer-bank-text strong { color: #000; font-size: 9px; }
+          .footer-ttd-area {
+            width: 180px;
+            padding: 8px 10px;
             text-align: center;
           }
-          .ttd-image {
-            height: 50px;
+          .ttd-title {
+            font-size: 9px;
+            color: #333;
+            margin-bottom: 6px;
+          }
+          .ttd-img {
+            height: 40px;
             object-fit: contain;
-            margin-bottom: 8px;
+            margin: 0 auto 4px auto;
+            display: block;
           }
           .ttd-name {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
             color: #000;
-            margin-top: 8px;
+            margin-top: 4px;
             border-top: 1px solid #000;
-            padding-top: 4px;
+            padding-top: 3px;
+            display: inline-block;
           }
           .ttd-role {
-            font-size: 9px;
+            font-size: 8px;
             color: #555;
           }
 
-          .keterangan-box {
-            margin-top: 12px;
-            padding: 8px 12px;
-            border: 1px solid #000;
-            font-size: 10px;
-          }
-          .keterangan-label { font-weight: 600; color: #333; }
-          .keterangan-value { color: #000; margin-top: 4px; }
-
-          .btn-print {
+          .print-btn {
             background: #16a34a;
             color: white;
             border: none;
@@ -421,8 +423,8 @@ export default function RekapProformaInvoicePage() {
             font-weight: 600;
             margin: 10px;
           }
-          .btn-print:hover { background: #15803d; }
-          .print-actions {
+          .print-btn:hover { background: #15803d; }
+          .print-bar {
             text-align: center;
             padding: 10px;
             background: #f3f4f6;
@@ -431,146 +433,141 @@ export default function RekapProformaInvoicePage() {
             z-index: 100;
           }
           @media print {
-            .print-actions { display: none !important; }
+            .print-bar { display: none !important; }
           }
         </style>
       </head>
       <body>
-        <div class="print-actions no-print">
-          <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+        <div class="print-bar no-print">
+          <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
         </div>
 
         <div class="page">
-          <div class="header-top">
-            <div class="logo-section">
-              <img src="/logo.png" alt="Logo" class="logo-img" onerror="this.style.display='none'" />
-              <div class="company-info">
-                <p class="company-name">PT. BUKIT AGROCHEMICAL BARU</p>
-                <p class="company-sub">GENERAL TRADING FERTILIZER & AGRICULTURAL CHEMICALS</p>
+          <div class="header-row">
+            <div class="logo-area">
+              <img src="/logo.png" alt="Logo" class="logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.marginLeft='0';" />
+              <div class="company-text">
+                <p class="company-title">PT. BUKIT AGROCHEMICAL BARU</p>
+                <p class="company-subtitle">GENERAL TRADING FERTILIZER & AGRICULTURAL CHEMICALS</p>
                 <p class="company-address">Alamat Kantor : Jl. Yos Sudarso no. 8 Kujan, Bulik, Lamandau, Kalimantan Tengah 74612</p>
               </div>
             </div>
-            <div class="qr-section">
-              <div class="qr-placeholder">QR</div>
+            <div class="qr-area">
+              <img src="/qr-code.png" alt="QR" class="qr-img" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'width:52px;height:52px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;\'>QR</div>';" />
             </div>
           </div>
 
-          <div class="header-title">
+          <div class="invoice-title">
             <h1>PROFORMA INVOICE</h1>
           </div>
 
-          <div class="info-grid">
-            <div class="info-box-left">
-              <p class="label">Kepada Yth,</p>
+          <div class="info-row">
+            <div class="customer-info">
+              <p class="customer-label">Kepada Yth,</p>
               <p class="customer-name">${item.namaCustomer || ""}</p>
               <p class="customer-address">${(item.alamatCustomer || "").replace(/\n/g, "<br>")}</p>
             </div>
-            <div class="info-box-right">
-              <div class="info-row">
-                <span class="info-label">Tanggal</span>
-                <span class="info-colon">:</span>
-                <span class="info-value">${item.tanggal || ""}</span>
+            <div class="invoice-meta">
+              <div class="meta-row">
+                <span class="meta-label">Tanggal</span>
+                <span class="meta-colon">:</span>
+                <span class="meta-value">${item.tanggal || ""}</span>
               </div>
-              <div class="info-row">
-                <span class="info-label">No Invoice</span>
-                <span class="info-colon">:</span>
-                <span class="info-value">${item.nomorPI || ""}</span>
+              <div class="meta-row">
+                <span class="meta-label">No Invoice</span>
+                <span class="meta-colon">:</span>
+                <span class="meta-value">${item.nomorPI || ""}</span>
               </div>
-              <div class="info-row">
-                <span class="info-label">Metode Pembayaran</span>
-                <span class="info-colon">:</span>
-                <span class="info-value">${item.metodePembayaran || ""}</span>
+              <div class="meta-row">
+                <span class="meta-label">Metode Pembayaran</span>
+                <span class="meta-colon">:</span>
+                <span class="meta-value">${item.metodePembayaran || ""}</span>
               </div>
             </div>
           </div>
 
-          <table>
+          <table class="data-table">
             <thead>
               <tr>
-                <th style="width: 30px;">NO</th>
-                <th>Nama Produk</th>
-                <th style="width: 60px;">Fot</th>
-                <th style="width: 90px;">Kuantitas</th>
-                <th style="width: 110px;">Harga Satuan</th>
-                <th style="width: 120px;">Total Harga</th>
+                <th style="width: 28px;">NO</th>
+                <th style="text-align: left; padding-left: 8px;">Nama Produk</th>
+                <th style="width: 45px;">Fot</th>
+                <th style="width: 75px;">Kuantitas<br>(kg)</th>
+                <th style="width: 95px;">Harga Satuan</th>
+                <th style="width: 105px;">Total Harga</th>
               </tr>
             </thead>
             <tbody>
               ${produkRows}
+              ${emptyRows}
             </tbody>
           </table>
 
-          <div class="summary-section">
-            <div class="terbilang-box">
-              <div class="terbilang-label">Terbilang :</div>
-              <div class="terbilang-value">${item.terbilang || "-"}</div>
-              <div class="bank-info">
-                <p style="font-weight: 700; margin-bottom: 4px;">Pembayaran mohon ditransfer via rekening:</p>
+          <div class="summary-row">
+            <div class="terbilang-area">
+              <div class="terbilang-title">Terbilang :</div>
+              <div class="terbilang-text">${item.terbilang || "-"}</div>
+              <div class="bank-details">
+                <p style="font-weight: 700; margin-bottom: 2px;">Pembayaran mohon ditransfer via rekening:</p>
                 <p><strong>BANK MANDIRI</strong> - Cabang Lamandau</p>
                 <p>a/n PT Bukit Agrochemical Baru</p>
-                <p style="margin-bottom: 8px;">No. Rek : 159-00-1205477-0</p>
+                <p style="margin-bottom: 4px;">No. Rek : 159-00-1205477-0</p>
                 <p><strong>BANK BRI</strong> - Cabang Lamandau</p>
                 <p>a/n PT Bukit Agrochemical Baru</p>
                 <p>No. Rek : 2232-01000-879-567</p>
               </div>
             </div>
-            <div class="calculation-box">
-              <div class="calc-row">
-                <span class="calc-label">Subtotal</span>
-                <span class="calc-value">${formatRupiah(item.subtotal)}</span>
+            <div class="calc-area">
+              <div class="calc-line">
+                <span class="calc-name">Subtotal</span>
+                <span class="calc-amount">${formatRupiah(item.subtotal)}</span>
               </div>
-              ${item.includePPN ? `
-              <div class="calc-row">
-                <span class="calc-label">PPN 11%</span>
-                <span class="calc-value">${formatRupiah(item.ppnNominal)}</span>
+              ${(item.uangMuka || 0) > 0 ? `
+              <div class="calc-line">
+                <span class="calc-name">Uang Muka</span>
+                <span class="calc-amount">${formatRupiah(item.uangMuka)}</span>
               </div>
               ` : ""}
-              ${(item.uangMuka || 0) > 0 ? `
-              <div class="calc-row">
-                <span class="calc-label">Uang Muka</span>
-                <span class="calc-value" style="color: #dc2626;">- ${formatRupiah(item.uangMuka)}</span>
+              ${item.includePPN ? `
+              <div class="calc-line">
+                <span class="calc-name">PPN 11%</span>
+                <span class="calc-amount">${formatRupiah(item.ppnNominal)}</span>
               </div>
               ` : ""}
               ${(item.ongkosKirim || 0) > 0 ? `
-              <div class="calc-row">
-                <span class="calc-label">Ongkos Kirim</span>
-                <span class="calc-value">${formatRupiah(item.ongkosKirim)}</span>
+              <div class="calc-line">
+                <span class="calc-name">Ongkos Kirim</span>
+                <span class="calc-amount">${formatRupiah(item.ongkosKirim)}</span>
               </div>
               ` : ""}
-              <div class="calc-row">
-                <span class="calc-label-total">Jumlah Tertagih</span>
-                <span class="calc-value-total">${formatRupiah(item.jumlahTertagih)}</span>
+              <div class="calc-line">
+                <span class="calc-name-bold">Jumlah Tertagih</span>
+                <span class="calc-amount-bold">${formatRupiah(item.jumlahTertagih)}</span>
               </div>
-              <div class="jatuh-tempo">
-                <span class="jatuh-tempo-label">Tanggal Jatuh Tempo : </span>
-                <span class="jatuh-tempo-value">${item.tanggalJatuhTempo || ""}</span>
+              <div class="due-date">
+                <span class="due-label">Tanggal Jatuh Tempo : </span>
+                <span class="due-value">${item.tanggalJatuhTempo || ""}</span>
               </div>
             </div>
           </div>
 
-          ${item.keterangan ? `
-          <div class="keterangan-box">
-            <span class="keterangan-label">Keterangan:</span>
-            <div class="keterangan-value">${item.keterangan}</div>
-          </div>
-          ` : ""}
-
-          <div class="footer-grid">
-            <div class="bank-box">
-              <p class="bank-box-title">Informasi Pembayaran:</p>
-              <div class="bank-box-content">
+          <div class="footer-row">
+            <div class="footer-bank-area">
+              <p class="footer-bank-title">Pembayaran mohon ditransfer via rekening:</p>
+              <div class="footer-bank-text">
                 <p><strong>BANK MANDIRI</strong> - Cabang Lamandau</p>
                 <p>a/n PT Bukit Agrochemical Baru</p>
                 <p>No. Rek : 159-00-1205477-0</p>
-                <p style="margin-top: 8px;"><strong>BANK BRI</strong> - Cabang Lamandau</p>
+                <p style="margin-top: 3px;"><strong>BANK BRI</strong> - Cabang Lamandau</p>
                 <p>a/n PT Bukit Agrochemical Baru</p>
                 <p>No. Rek : 2232-01000-879-567</p>
               </div>
             </div>
-            <div class="ttd-box">
-              ${item.ttdImage ? `<img src="${item.ttdImage}" class="ttd-image" alt="TTD" />` : `<div style="height: 50px;"></div>`}
+            <div class="footer-ttd-area">
+              <p class="ttd-title">Dengan Hormat</p>
+              ${item.ttdImage ? `<img src="${item.ttdImage}" class="ttd-img" alt="TTD" />` : `<div style="height: 40px;"></div>`}
               <p class="ttd-name">${item.ttdNama || ""}</p>
-              <p class="ttd-role">${item.ttdJabatan || ""}</p>
+              <p class="ttd-role">${item.ttdJabatan ? `(${item.ttdJabatan})` : ""}</p>
             </div>
           </div>
         </div>
