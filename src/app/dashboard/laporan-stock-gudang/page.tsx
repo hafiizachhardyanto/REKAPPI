@@ -34,6 +34,8 @@ export default function LaporanInputStockGudangPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterFot, setFilterFot] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [formData, setFormData] = useState({
     fot: "",
@@ -59,10 +61,22 @@ export default function LaporanInputStockGudangPage() {
     { value: "BOTOL", label: "BOTOL" },
   ];
 
+  const itemsPerPageOptions = [
+    { value: "5", label: "5 per halaman" },
+    { value: "10", label: "10 per halaman" },
+    { value: "20", label: "20 per halaman" },
+    { value: "50", label: "50 per halaman" },
+    { value: "100", label: "100 per halaman" },
+  ];
+
   useEffect(() => {
     fetchStockGudang();
     fetchFotList();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterFot, itemsPerPage]);
 
   const fetchFotList = async () => {
     try {
@@ -363,6 +377,13 @@ export default function LaporanInputStockGudangPage() {
 
   const uniqueFotList = Array.from(new Set(stockList.map((s) => s.fot))).sort();
 
+  const totalPages = Math.ceil(filteredStockList.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedData = filteredStockList.slice(startIndex, endIndex);
+  const startItem = filteredStockList.length > 0 ? startIndex + 1 : 0;
+  const endItem = Math.min(endIndex, filteredStockList.length);
+
   const getDisplayUnitLabel = (unit: string) => {
     if (unit === "BOTOL") return "ZAK";
     return unit;
@@ -380,6 +401,26 @@ export default function LaporanInputStockGudangPage() {
       return (row.stokAkhirUnit || 0) * (row.bobotPerUnit || 50);
     }
     return row.stokAkhirKG || 0;
+  };
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const renderPageNumbers = () => {
+    const pages: number[] = [];
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
   };
 
   const columns = [
@@ -788,11 +829,63 @@ export default function LaporanInputStockGudangPage() {
 
             <Table
               columns={columns}
-              data={filteredStockList}
+              data={paginatedData}
               isLoading={false}
               emptyMessage="Belum ada data stock gudang"
               keyExtractor={(row) => row.id}
             />
+
+            {filteredStockList.length > 0 && (
+              <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-500">
+                    Menampilkan {startItem}-{endItem} dari {filteredStockList.length} data
+                  </span>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onChange={(e) => setItemsPerPage(parseInt(e.target.value))}
+                    options={itemsPerPageOptions}
+                    className="w-36 text-sm"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 text-gray-700"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+
+                  {renderPageNumbers().map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      className={`min-w-[36px] px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        currentPage === page
+                          ? "bg-green-600 text-white shadow-sm"
+                          : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 text-gray-700"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       </div>
