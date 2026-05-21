@@ -31,6 +31,7 @@ export default function InputProformaInvoicePage() {
   const { user } = useAuth();
   const [stockList, setStockList] = useState<StockGudang[]>([]);
   const [ttdList, setTtdList] = useState<TTDData[]>([]);
+  const [existingPIList, setExistingPIList] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -71,6 +72,7 @@ export default function InputProformaInvoicePage() {
   useEffect(() => {
     fetchStockGudang();
     fetchTTD();
+    fetchExistingPI();
     generateTanggalJatuhTempo();
   }, []);
 
@@ -101,6 +103,26 @@ export default function InputProformaInvoicePage() {
     } catch (error) {
       console.error(error);
     }
+  };
+
+  const fetchExistingPI = async () => {
+    try {
+      const q = query(collection(db, "proformaInvoice"), orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+      const nomorPIs = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return (data.nomorPI || "").toString().trim().toUpperCase();
+      }).filter((pi) => pi !== "");
+      setExistingPIList(nomorPIs);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const checkDuplicatePI = (nomorPI: string): boolean => {
+    const normalized = nomorPI.trim().toUpperCase();
+    if (!normalized) return false;
+    return existingPIList.includes(normalized);
   };
 
   const numberToWords = (num: number): string => {
@@ -193,6 +215,17 @@ export default function InputProformaInvoicePage() {
         return newErrors;
       });
     }
+    if (name === "nomorPI") {
+      if (checkDuplicatePI(value)) {
+        setErrors((prev) => ({ ...prev, nomorPI: `Nomor PI "${value.trim().toUpperCase()}" sudah terdaftar di database` }));
+      } else {
+        setErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.nomorPI;
+          return newErrors;
+        });
+      }
+    }
     setTimeout(() => calculateTotals(), 0);
   };
 
@@ -240,6 +273,7 @@ export default function InputProformaInvoicePage() {
     const newErrors: Record<string, string> = {};
     if (!formData.tanggal) newErrors.tanggal = "Tanggal wajib diisi";
     if (!formData.nomorPI.trim()) newErrors.nomorPI = "Nomor PI wajib diisi";
+    if (checkDuplicatePI(formData.nomorPI)) newErrors.nomorPI = `Nomor PI "${formData.nomorPI.trim().toUpperCase()}" sudah terdaftar di database`;
     if (!formData.namaCustomer.trim()) newErrors.namaCustomer = "Nama customer wajib diisi";
     if (!formData.alamatCustomer.trim()) newErrors.alamatCustomer = "Alamat customer wajib diisi";
     if (!formData.selectedTTD) newErrors.selectedTTD = "Tanda tangan wajib dipilih";
@@ -379,7 +413,17 @@ export default function InputProformaInvoicePage() {
           <Card title="Informasi Customer">
             <div className="space-y-4">
               <Input label="Tanggal" type="date" name="tanggal" value={formData.tanggal} onChange={handleChange} error={errors.tanggal} required />
-              <Input label="Nomor PI" type="text" name="nomorPI" value={formData.nomorPI} onChange={handleChange} placeholder="Contoh: BAGB-PI-0657" error={errors.nomorPI} required />
+              <div>
+                <Input label="Nomor PI" type="text" name="nomorPI" value={formData.nomorPI} onChange={handleChange} placeholder="Contoh: BAGB-PI-0657" error={errors.nomorPI} required />
+                {checkDuplicatePI(formData.nomorPI) && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span className="text-sm font-medium">Nomor PI sudah terdaftar, silakan gunakan nomor lain</span>
+                  </div>
+                )}
+              </div>
               <Input label="Nama Customer" type="text" name="namaCustomer" value={formData.namaCustomer} onChange={handleChange} placeholder="Masukkan nama customer" error={errors.namaCustomer} required />
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -571,7 +615,7 @@ export default function InputProformaInvoicePage() {
           }}>
             Reset Form
           </Button>
-          <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting}>
+          <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting} disabled={checkDuplicatePI(formData.nomorPI)}>
             Simpan Proforma Invoice
           </Button>
         </div>
