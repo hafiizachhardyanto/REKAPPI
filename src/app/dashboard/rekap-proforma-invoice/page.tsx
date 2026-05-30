@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   collection,
   getDocs,
@@ -88,6 +89,7 @@ interface StockItem {
 }
 
 export default function RekapProformaInvoicePage() {
+  const router = useRouter();
   const { user } = useAuth();
   const [data, setData] = useState<ProformaInvoice[]>([]);
   const [suratMuatMap, setSuratMuatMap] = useState<Record<string, SuratMuatInfo[]>>({});
@@ -581,7 +583,7 @@ export default function RekapProformaInvoicePage() {
               <div class="info-row">
                 <div class="customer-box">
                   <p class="customer-name">${item.namaCustomer || ""}</p>
-                  <p class="customer-address">${(item.alamatCustomer || "").replace(/\n/g, "<br>")}</p>
+                  <p class="customer-address">${(item.alamatCustomer || "").split("\n").join("<br>")}</p>
                 </div>
                 <div class="invoice-meta">
                   <div class="meta-row">
@@ -715,20 +717,32 @@ export default function RekapProformaInvoicePage() {
     {
       key: "statusPengangkutan",
       header: "Status Muat",
-      width: "140px",
+      width: "180px",
       render: (row: ProformaInvoice) => {
         const status = getStatusPengangkutan(row);
         const badge = getStatusBadge(status);
         const totalOrdered = getTotalOrdered(row);
         const totalLoaded = getTotalLoaded(row.nomorPI);
+        const isComplete = status === "complete";
         return (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <span className={`px-2 py-1 rounded-md text-xs font-bold ${badge.class}`}>
               {badge.label}
             </span>
             <span className="text-xs text-gray-500 font-mono">
               {totalLoaded.toLocaleString()} / {totalOrdered.toLocaleString()} KG
             </span>
+            {!isComplete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); router.push("/dashboard/surat-pengangkutan"); }}
+                className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Buat Surat Muat
+              </button>
+            )}
           </div>
         );
       },

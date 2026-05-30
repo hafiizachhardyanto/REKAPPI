@@ -905,7 +905,7 @@ export default function SuratPengangkutanPage() {
         {jenisSurat === "gudangInduk" && (
           <Card title="Proforma Invoice">
             <div className="space-y-4">
-              <div ref={searchRef} className="relative">
+              <div ref={searchRef} className="relative" style={{ position: 'relative', zIndex: 50 }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Cari Nomor Proforma Invoice
                 </label>
@@ -923,10 +923,10 @@ export default function SuratPengangkutanPage() {
                   }}
                   onFocus={() => setShowPISearch(true)}
                   placeholder="Ketik nomor PI atau nama customer..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white"
                 />
                 {showPISearch && (
-                  <div className="absolute z-[100] w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-[300px] overflow-y-auto" style={{ position: 'absolute', left: 0, right: 0 }}>
+                  <div className="fixed sm:absolute left-4 right-4 sm:left-0 sm:right-0 sm:mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-[60vh] sm:max-h-[400px] overflow-y-auto" style={{ zIndex: 9999, top: 'auto' }}>
                     {searchPI && filteredPIList.length === 0 ? (
                       <div className="p-4 text-sm text-gray-500">Tidak ada PI yang tersedia (semua sudah selesai dimuat atau tidak cocok)</div>
                     ) : !searchPI ? (
