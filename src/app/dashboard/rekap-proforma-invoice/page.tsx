@@ -11,6 +11,7 @@ import {
   updateDoc,
   where,
   serverTimestamp,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -18,9 +19,9 @@ import Header from "@/app/components/ui/Header";
 import Table from "@/app/components/ui/Table";
 import Button from "@/app/components/ui/Button";
 import Modal from "@/app/components/ui/Modal";
-import Card from "@/app/components/ui/Card";
 import Input from "@/app/components/ui/Input";
 import Select from "@/app/components/ui/Select";
+import Card from "@/app/components/ui/Card";
 import { exportToExcel } from "@/app/utils/exportExcel";
 
 interface ProdukItem {
@@ -34,6 +35,7 @@ interface ProdukItem {
 }
 
 interface SuratMuatInfo {
+  id: string;
   nomorSeri: string;
   tanggal: string;
   items: Array<{
@@ -45,6 +47,7 @@ interface SuratMuatInfo {
   totalKG: number;
   nomorPolisi: string;
   driverUnit: string;
+  nomorPI: string;
 }
 
 interface ProformaInvoice {
@@ -74,6 +77,16 @@ interface ProformaInvoice {
   statusPengangkutan?: string;
 }
 
+interface StockItem {
+  id: string;
+  namaBarang: string;
+  bobotPerUnit: number;
+  stokAkhirUnit: number;
+  stokAkhirKG: number;
+  barangKeluarUnit: number;
+  barangKeluarKG: number;
+}
+
 export default function RekapProformaInvoicePage() {
   const { user } = useAuth();
   const [data, setData] = useState<ProformaInvoice[]>([]);
@@ -83,16 +96,37 @@ export default function RekapProformaInvoicePage() {
   const [selectedItem, setSelectedItem] = useState<ProformaInvoice | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isEditSuratModalOpen, setIsEditSuratModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedSurat, setSelectedSurat] = useState<SuratMuatInfo | null>(null);
+  const [stockList, setStockList] = useState<StockItem[]>([]);
 
   const [editForm, setEditForm] = useState({
     sisaPengambilanKG: "",
     statusPengangkutan: "pending",
   });
 
+  const [editSuratForm, setEditSuratForm] = useState({
+    tanggal: "",
+    nomorSeri: "",
+    nomorPolisi: "",
+    driverUnit: "",
+    nomorSIM: "",
+    items: [] as Array<{
+      nomorSubDO: string;
+      nomorPO: string;
+      jenisPupuk: string;
+      party: string;
+      pengambilanZAK: string;
+      bobotPerUnit: number;
+      sisa: string;
+    }>,
+  });
+
   useEffect(() => {
     fetchData();
     fetchSuratMuat();
+    fetchStockGudang();
   }, []);
 
   const fetchData = async () => {
@@ -113,34 +147,59 @@ export default function RekapProformaInvoicePage() {
     }
   };
 
+  const fetchStockGudang = async () => {
+    try {
+      const q = query(collection(db, "stockGudang"), orderBy("namaBarang", "asc"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        namaBarang: doc.data().namaBarang || "",
+        bobotPerUnit: doc.data().bobotPerUnit || 50,
+        stokAkhirUnit: doc.data().stokAkhirUnit || 0,
+        stokAkhirKG: doc.data().stokAkhirKG || 0,
+        barangKeluarUnit: doc.data().barangKeluarUnit || 0,
+        barangKeluarKG: doc.data().barangKeluarKG || 0,
+      } as StockItem));
+      setStockList(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const fetchSuratMuat = async () => {
     try {
       const q = query(collection(db, "suratPengangkutan"), where("jenisSurat", "==", "gudangInduk"));
       const snapshot = await getDocs(q);
       const map: Record<string, SuratMuatInfo[]> = {};
-
       snapshot.docs.forEach((docSnap) => {
         const d = docSnap.data();
-        const piList: string[] = d.nomorPIList || [];
+        const piList: string[] = d.nomorPIList || [d.nomorPI] || [];
         const info: SuratMuatInfo = {
+          id: docSnap.id,
           nomorSeri: d.nomorSeri || "",
           tanggal: d.tanggal || "",
           items: d.items || [],
           totalKG: d.totalPengambilanKG || 0,
           nomorPolisi: d.nomorPolisi || "",
           driverUnit: d.driverUnit || "",
+          nomorPI: d.nomorPI || "",
         };
-
         piList.forEach((pi) => {
           if (!map[pi]) map[pi] = [];
           map[pi].push(info);
         });
       });
-
       setSuratMuatMap(map);
     } catch (error) {
       console.error(error);
     }
+  };
+
+  const getStockForProduct = (namaProduk: string) => {
+    return stockList.find((s) =>
+      s.namaBarang.toUpperCase().includes(namaProduk.toUpperCase()) ||
+      namaProduk.toUpperCase().includes(s.namaBarang.toUpperCase())
+    );
   };
 
   const getSuratMuatForPI = (nomorPI: string) => {
@@ -194,10 +253,30 @@ export default function RekapProformaInvoicePage() {
     setIsEditModalOpen(true);
   };
 
+  const handleEditSurat = (surat: SuratMuatInfo) => {
+    setSelectedSurat(surat);
+    setEditSuratForm({
+      tanggal: surat.tanggal,
+      nomorSeri: surat.nomorSeri,
+      nomorPolisi: surat.nomorPolisi,
+      driverUnit: surat.driverUnit,
+      nomorSIM: "",
+      items: (surat.items || []).map((it) => ({
+        nomorSubDO: "",
+        nomorPO: "",
+        jenisPupuk: it.jenisPupuk || "",
+        party: "",
+        pengambilanZAK: String(it.pengambilanZAK || 0),
+        bobotPerUnit: it.bobotPerUnit || 50,
+        sisa: "",
+      })),
+    });
+    setIsEditSuratModalOpen(true);
+  };
+
   const handleUpdateStatus = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
-
     setIsSubmitting(true);
     try {
       await updateDoc(doc(db, "proformaInvoice", selectedItem.id), {
@@ -211,6 +290,155 @@ export default function RekapProformaInvoicePage() {
       console.error(error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateSurat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSurat || !selectedItem) return;
+    setIsSubmitting(true);
+    try {
+      const oldItems = selectedSurat.items || [];
+      const newItems = editSuratForm.items.map((it) => ({
+        nomorSubDO: it.nomorSubDO,
+        nomorPO: it.nomorPO,
+        jenisPupuk: it.jenisPupuk,
+        party: it.party,
+        pengambilanZAK: parseFloat(it.pengambilanZAK) || 0,
+        bobotPerUnit: it.bobotPerUnit,
+        totalKG: (parseFloat(it.pengambilanZAK) || 0) * it.bobotPerUnit,
+        sisa: it.sisa,
+        fot: "",
+      }));
+      const totalPengambilanKG = newItems.reduce((sum, it) => sum + it.totalKG, 0);
+      const updateData: any = {
+        tanggal: editSuratForm.tanggal,
+        nomorSeri: editSuratForm.nomorSeri.trim(),
+        nomorPolisi: editSuratForm.nomorPolisi.trim(),
+        driverUnit: editSuratForm.driverUnit.trim(),
+        nomorSIM: editSuratForm.nomorSIM.trim() || null,
+        items: newItems,
+        totalPengambilanKG: totalPengambilanKG,
+        updatedAt: serverTimestamp(),
+      };
+      await updateDoc(doc(db, "suratPengangkutan", selectedSurat.id), updateData);
+      await updateDoc(doc(db, "transaksiBarangKeluar", selectedSurat.id), updateData);
+
+      const oldTotalKG = oldItems.reduce((sum, it) => sum + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50)), 0);
+      const delta = oldTotalKG - totalPengambilanKG;
+      const piRef = doc(db, "proformaInvoice", selectedItem.id);
+      const piSnap = await getDoc(piRef);
+      if (piSnap.exists()) {
+        const piData = piSnap.data();
+        const currentSisa = piData.sisaPengambilanKG !== undefined ? piData.sisaPengambilanKG : 0;
+        const newSisa = Math.max(0, currentSisa + delta);
+        await updateDoc(piRef, {
+          sisaPengambilanKG: newSisa,
+          statusPengangkutan: newSisa <= 0 ? "complete" : (totalPengambilanKG > 0 ? "partial" : "pending"),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      const productMapOld: Record<string, number> = {};
+      const productMapNew: Record<string, number> = {};
+      oldItems.forEach((it) => {
+        const key = it.jenisPupuk;
+        productMapOld[key] = (productMapOld[key] || 0) + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50));
+      });
+      newItems.forEach((it) => {
+        const key = it.jenisPupuk;
+        productMapNew[key] = (productMapNew[key] || 0) + (it.totalKG || 0);
+      });
+      const allProducts = new Set([...Object.keys(productMapOld), ...Object.keys(productMapNew)]);
+      for (const prod of allProducts) {
+        const oldKG = productMapOld[prod] || 0;
+        const newKG = productMapNew[prod] || 0;
+        const deltaKG = oldKG - newKG;
+        const stock = getStockForProduct(prod);
+        if (stock && deltaKG !== 0) {
+          const stockRef = doc(db, "stockGudang", stock.id);
+          const stockSnap = await getDoc(stockRef);
+          if (stockSnap.exists()) {
+            const sData = stockSnap.data();
+            const currentUnit = sData.stokAkhirUnit || 0;
+            const currentKG = sData.stokAkhirKG || 0;
+            const currentKeluarUnit = sData.barangKeluarUnit || 0;
+            const currentKeluarKG = sData.barangKeluarKG || 0;
+            const bobot = stock.bobotPerUnit || 50;
+            const deltaUnit = deltaKG / bobot;
+            await updateDoc(stockRef, {
+              stokAkhirUnit: Math.max(0, currentUnit + deltaUnit),
+              stokAkhirKG: Math.max(0, currentKG + deltaKG),
+              barangKeluarUnit: Math.max(0, currentKeluarUnit - deltaUnit),
+              barangKeluarKG: Math.max(0, currentKeluarKG - deltaKG),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+      }
+      setIsEditSuratModalOpen(false);
+      fetchData();
+      fetchSuratMuat();
+      fetchStockGudang();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteSurat = async (surat: SuratMuatInfo) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus surat pengangkutan ${surat.nomorSeri}?`)) return;
+    try {
+      const totalKG = (surat.items || []).reduce((sum, it) => sum + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50)), 0);
+      const piRef = doc(db, "proformaInvoice", selectedItem!.id);
+      const piSnap = await getDoc(piRef);
+      if (piSnap.exists()) {
+        const piData = piSnap.data();
+        const currentSisa = piData.sisaPengambilanKG !== undefined ? piData.sisaPengambilanKG : 0;
+        const newSisa = currentSisa + totalKG;
+        await updateDoc(piRef, {
+          sisaPengambilanKG: newSisa,
+          statusPengangkutan: newSisa > 0 ? "partial" : "pending",
+          updatedAt: serverTimestamp(),
+        });
+      }
+      const productMap: Record<string, number> = {};
+      (surat.items || []).forEach((it) => {
+        const key = it.jenisPupuk;
+        productMap[key] = (productMap[key] || 0) + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50));
+      });
+      for (const prod of Object.keys(productMap)) {
+        const kg = productMap[prod];
+        const stock = getStockForProduct(prod);
+        if (stock) {
+          const stockRef = doc(db, "stockGudang", stock.id);
+          const stockSnap = await getDoc(stockRef);
+          if (stockSnap.exists()) {
+            const sData = stockSnap.data();
+            const currentUnit = sData.stokAkhirUnit || 0;
+            const currentKG = sData.stokAkhirKG || 0;
+            const currentKeluarUnit = sData.barangKeluarUnit || 0;
+            const currentKeluarKG = sData.barangKeluarKG || 0;
+            const bobot = stock.bobotPerUnit || 50;
+            const unit = kg / bobot;
+            await updateDoc(stockRef, {
+              stokAkhirUnit: currentUnit + unit,
+              stokAkhirKG: currentKG + kg,
+              barangKeluarUnit: Math.max(0, currentKeluarUnit - unit),
+              barangKeluarKG: Math.max(0, currentKeluarKG - kg),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+      }
+      await deleteDoc(doc(db, "suratPengangkutan", surat.id));
+      await deleteDoc(doc(db, "transaksiBarangKeluar", surat.id));
+      fetchData();
+      fetchSuratMuat();
+      fetchStockGudang();
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -249,7 +477,6 @@ export default function RekapProformaInvoicePage() {
   const handlePrintPDF = (item: ProformaInvoice) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-
     const produkRows = (item.produkItems || []).map((p, idx) => `
       <tr>
         <td style="text-align: center; padding: 5px 3px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">${idx + 1}</td>
@@ -261,7 +488,6 @@ export default function RekapProformaInvoicePage() {
         <td style="text-align: right; padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600; height: 28px;">${formatRupiah(p.totalHarga)}</td>
       </tr>
     `).join("");
-
     const emptyRowsCount = Math.max(0, 10 - (item.produkItems || []).length);
     const emptyRows = Array.from({ length: emptyRowsCount }, (_, i) => `
       <tr>
@@ -274,297 +500,88 @@ export default function RekapProformaInvoicePage() {
         <td style="text-align: right; padding: 5px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; height: 28px;">&nbsp;</td>
       </tr>
     `).join("");
-
     const createdAtStr = item.createdAt instanceof Date
       ? item.createdAt.toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
       : "-";
-
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>Proforma Invoice ${item.nomorPI}</title>
         <style>
-          @page {
-            size: A4;
-            margin: 12mm 14mm 12mm 14mm;
-          }
-          @media print {
-            body { margin: 0; padding: 0; }
-            .no-print { display: none !important; }
-          }
+          @page { size: A4; margin: 12mm 14mm 12mm 14mm; }
+          @media print { body { margin: 0; padding: 0; } .no-print { display: none !important; } }
           * { box-sizing: border-box; margin: 0; padding: 0; }
-          body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background: white;
-            color: #000;
-            font-size: 10px;
-            line-height: 1.3;
-          }
-          .page {
-            width: 182mm;
-            margin: 0 auto;
-            background: white;
-            position: relative;
-            min-height: 257mm;
-          }
-          .watermark {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 280px;
-            height: auto;
-            opacity: 0.08;
-            pointer-events: none;
-            z-index: 0;
-          }
-          .content-layer {
-            position: relative;
-            z-index: 1;
-          }
-          .header-img {
-            width: 100%;
-            display: block;
-            margin-bottom: 0;
-          }
-          .invoice-title {
-            text-align: center;
-            margin: 8px 0 10px 0;
-            padding: 5px 0;
-            background: #dcfce7;
-            border-top: 2px solid #16a34a;
-            border-bottom: 2px solid #16a34a;
-          }
-          .invoice-title h1 {
-            color: #111;
-            font-size: 15px;
-            margin: 0;
-            font-weight: bold;
-            letter-spacing: 3px;
-          }
-          .info-section {
-            margin-bottom: 10px;
-          }
-          .kepada-label {
-            font-size: 9px;
-            color: #333;
-            margin-bottom: 2px;
-          }
-          .info-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 0;
-          }
-          .customer-box {
-            flex: 1;
-            border: 1px solid #000;
-            padding: 8px 10px;
-            min-height: 75px;
-          }
-          .customer-name {
-            font-size: 11px;
-            font-weight: 700;
-            color: #000;
-            margin: 0 0 3px 0;
-          }
-          .customer-address {
-            font-size: 9px;
-            color: #333;
-            line-height: 1.5;
-          }
-          .invoice-meta {
-            width: 250px;
-            padding: 0 0 0 10px;
-          }
-          .meta-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 2px 0;
-            font-size: 9px;
-            border-bottom: 1px solid #ddd;
-          }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: white; color: #000; font-size: 10px; line-height: 1.3; }
+          .page { width: 182mm; margin: 0 auto; background: white; position: relative; min-height: 257mm; }
+          .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: auto; opacity: 0.08; pointer-events: none; z-index: 0; }
+          .content-layer { position: relative; z-index: 1; }
+          .header-img { width: 100%; display: block; margin-bottom: 0; }
+          .invoice-title { text-align: center; margin: 8px 0 10px 0; padding: 5px 0; background: #dcfce7; border-top: 2px solid #16a34a; border-bottom: 2px solid #16a34a; }
+          .invoice-title h1 { color: #111; font-size: 15px; margin: 0; font-weight: bold; letter-spacing: 3px; }
+          .info-section { margin-bottom: 10px; }
+          .kepada-label { font-size: 9px; color: #333; margin-bottom: 2px; }
+          .info-row { display: flex; justify-content: space-between; gap: 0; }
+          .customer-box { flex: 1; border: 1px solid #000; padding: 8px 10px; min-height: 75px; }
+          .customer-name { font-size: 11px; font-weight: 700; color: #000; margin: 0 0 3px 0; }
+          .customer-address { font-size: 9px; color: #333; line-height: 1.5; }
+          .invoice-meta { width: 250px; padding: 0 0 0 10px; }
+          .meta-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 9px; border-bottom: 1px solid #ddd; }
           .meta-row:last-child { border-bottom: none; }
           .meta-label { color: #333; min-width: 90px; }
           .meta-colon { margin: 0 3px; }
           .meta-value { color: #000; font-weight: 600; text-align: right; flex: 1; }
-          .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 0;
-          }
-          .data-table th {
-            background: #ffedd5;
-            color: #000;
-            font-size: 9px;
-            padding: 5px 3px;
-            font-weight: 700;
-            border: 1px solid #000;
-            text-align: center;
-          }
-          .data-table td {
-            border: 1px solid #000;
-            padding: 5px 3px;
-            vertical-align: top;
-          }
-          .summary-row {
-            display: flex;
-            border: 1px solid #000;
-            border-top: none;
-          }
-          .terbilang-area {
-            flex: 1;
-            padding: 8px 10px;
-            border-right: 1px solid #000;
-          }
-          .terbilang-title {
-            font-size: 9px;
-            color: #333;
-            margin-bottom: 3px;
-            font-weight: 600;
-          }
-          .terbilang-text {
-            font-size: 10px;
-            color: #000;
-            font-weight: 700;
-            text-transform: uppercase;
-            line-height: 1.4;
-          }
-          .calc-area {
-            width: 250px;
-            padding: 0;
-          }
-          .calc-line {
-            display: flex;
-            justify-content: space-between;
-            padding: 3px 10px;
-            border-bottom: 1px solid #ddd;
-            font-size: 9px;
-          }
-          .calc-line:last-child {
-            border-bottom: none;
-            background: #f0fdf4;
-            border-top: 1px solid #16a34a;
-            padding: 5px 10px;
-          }
+          .data-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+          .data-table th { background: #ffedd5; color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; }
+          .data-table td { border: 1px solid #000; padding: 5px 3px; vertical-align: top; }
+          .summary-row { display: flex; border: 1px solid #000; border-top: none; }
+          .terbilang-area { flex: 1; padding: 8px 10px; border-right: 1px solid #000; }
+          .terbilang-title { font-size: 9px; color: #333; margin-bottom: 3px; font-weight: 600; }
+          .terbilang-text { font-size: 10px; color: #000; font-weight: 700; text-transform: uppercase; line-height: 1.4; }
+          .calc-area { width: 250px; padding: 0; }
+          .calc-line { display: flex; justify-content: space-between; padding: 3px 10px; border-bottom: 1px solid #ddd; font-size: 9px; }
+          .calc-line:last-child { border-bottom: none; background: #f0fdf4; border-top: 1px solid #16a34a; padding: 5px 10px; }
           .calc-name { color: #333; }
           .calc-name-bold { font-weight: 700; color: #000; }
           .calc-amount { font-weight: 600; font-family: monospace; font-size: 9px; }
           .calc-amount-bold { font-size: 10px; color: #000; font-weight: 700; font-family: monospace; }
-          .due-date {
-            padding: 5px 10px;
-            text-align: right;
-            border-top: 1px solid #ddd;
-            font-size: 11px;
-          }
+          .due-date { padding: 5px 10px; text-align: right; border-top: 1px solid #ddd; font-size: 11px; }
           .due-label { color: #666; font-size: 11px; }
           .due-value { color: #dc2626; font-weight: 700; font-size: 11px; }
-          .created-info {
-            padding: 4px 10px;
-            text-align: right;
-            border-top: 1px solid #eee;
-            font-size: 10px;
-            color: #666;
-          }
-          .footer-row {
-            display: flex;
-            border: 1px solid #000;
-            border-top: none;
-          }
-          .footer-bank-area {
-            flex: 1;
-            padding: 8px 10px;
-            border-right: 1px solid #000;
-          }
-          .footer-bank-title {
-            font-size: 9px;
-            font-weight: 700;
-            color: #000;
-            margin-bottom: 5px;
-          }
-          .footer-bank-text {
-            font-size: 8px;
-            line-height: 1.6;
-            color: #333;
-          }
+          .created-info { padding: 4px 10px; text-align: right; border-top: 1px solid #eee; font-size: 10px; color: #666; }
+          .footer-row { display: flex; border: 1px solid #000; border-top: none; }
+          .footer-bank-area { flex: 1; padding: 8px 10px; border-right: 1px solid #000; }
+          .footer-bank-title { font-size: 9px; font-weight: 700; color: #000; margin-bottom: 5px; }
+          .footer-bank-text { font-size: 8px; line-height: 1.6; color: #333; }
           .footer-bank-text strong { color: #000; font-size: 9px; }
-          .footer-ttd-area {
-            width: 180px;
-            padding: 8px 10px;
-            text-align: center;
-          }
-          .ttd-title {
-            font-size: 9px;
-            color: #333;
-            margin-bottom: 6px;
-          }
-          .ttd-img {
-            height: 40px;
-            object-fit: contain;
-            margin: 0 auto 4px auto;
-            display: block;
-          }
-          .ttd-name {
-            font-size: 10px;
-            font-weight: 700;
-            color: #000;
-            margin-top: 4px;
-            border-top: 1px solid #000;
-            padding-top: 3px;
-            display: inline-block;
-          }
-          .ttd-role {
-            font-size: 8px;
-            color: #555;
-          }
-          .print-btn {
-            background: #16a34a;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            margin: 10px;
-          }
+          .footer-ttd-area { width: 180px; padding: 8px 10px; text-align: center; }
+          .ttd-title { font-size: 9px; color: #333; margin-bottom: 6px; }
+          .ttd-img { height: 40px; object-fit: contain; margin: 0 auto 4px auto; display: block; }
+          .ttd-name { font-size: 10px; font-weight: 700; color: #000; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block; }
+          .ttd-role { font-size: 8px; color: #555; }
+          .print-btn { background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 10px; }
           .print-btn:hover { background: #15803d; }
-          .print-bar {
-            text-align: center;
-            padding: 10px;
-            background: #f3f4f6;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-          }
-          @media print {
-            .print-bar { display: none !important; }
-          }
+          .print-bar { text-align: center; padding: 10px; background: #f3f4f6; position: sticky; top: 0; z-index: 100; }
+          @media print { .print-bar { display: none !important; } }
         </style>
       </head>
       <body>
         <div class="print-bar no-print">
           <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
         </div>
-
         <div class="page">
           <img src="/LogoAGRO.png" alt="Watermark" class="watermark" onerror="this.style.display='none'" />
-
           <div class="content-layer">
-            <img src="/logo.png" alt="Header" class="header-img" onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('afterbegin', '<div style=\\'text-align:center;padding:10px;border:1px solid #ccc;margin-bottom:10px;\\'>Logo tidak tersedia</div>');" />
-
+            <img src="/logo.png" alt="Header" class="header-img" onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('afterbegin', '<div style=\'text-align:center;padding:10px;border:1px solid #ccc;margin-bottom:10px;\'>Logo tidak tersedia</div>');" />
             <div class="invoice-title">
               <h1>PROFORMA INVOICE</h1>
             </div>
-
             <div class="info-section">
               <p class="kepada-label">Kepada Yth,</p>
               <div class="info-row">
                 <div class="customer-box">
                   <p class="customer-name">${item.namaCustomer || ""}</p>
-                  <p class="customer-address">${(item.alamatCustomer || "").replace(/\\n/g, "<br>")}</p>
+                  <p class="customer-address">${(item.alamatCustomer || "").replace(/\n/g, "<br>")}</p>
                 </div>
                 <div class="invoice-meta">
                   <div class="meta-row">
@@ -585,7 +602,6 @@ export default function RekapProformaInvoicePage() {
                 </div>
               </div>
             </div>
-
             <table class="data-table">
               <thead>
                 <tr>
@@ -603,12 +619,10 @@ export default function RekapProformaInvoicePage() {
                 ${emptyRows}
               </tbody>
             </table>
-
             <div class="summary-row">
               <div class="terbilang-area">
                 <div class="terbilang-title">Terbilang :</div>
                 <div class="terbilang-text">${item.terbilang || "-"}</div>
-
               </div>
               <div class="calc-area">
                 <div class="calc-line">
@@ -646,7 +660,6 @@ export default function RekapProformaInvoicePage() {
                 </div>
               </div>
             </div>
-
             <div class="footer-row">
               <div class="footer-bank-area">
                 <p class="footer-bank-title">Pembayaran mohon ditransfer via rekening:</p>
@@ -671,7 +684,6 @@ export default function RekapProformaInvoicePage() {
       </body>
       </html>
     `;
-
     printWindow.document.write(html);
     printWindow.document.close();
   };
@@ -763,6 +775,28 @@ export default function RekapProformaInvoicePage() {
     },
   ];
 
+  const handleSuratItemChange = (idx: number, field: string, value: string) => {
+    setEditSuratForm((prev) => {
+      const newItems = [...prev.items];
+      newItems[idx] = { ...newItems[idx], [field]: value };
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const addSuratItem = () => {
+    setEditSuratForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { nomorSubDO: "", nomorPO: "", jenisPupuk: "", party: "", pengambilanZAK: "", bobotPerUnit: 50, sisa: "" }],
+    }));
+  };
+
+  const removeSuratItem = (idx: number) => {
+    setEditSuratForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== idx),
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <Header title="Rekap Proforma Invoice" subtitle="Kelola dan lihat riwayat proforma invoice beserta status pengangkutan" />
@@ -815,7 +849,6 @@ export default function RekapProformaInvoicePage() {
                 <p className="text-lg font-bold text-gray-800">{selectedItem.tanggal}</p>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-gray-50 rounded-xl">
                 <p className="text-xs text-gray-500 uppercase tracking-wide">Customer</p>
@@ -829,7 +862,6 @@ export default function RekapProformaInvoicePage() {
                 <p className="font-semibold text-red-600">{selectedItem.tanggalJatuhTempo}</p>
               </div>
             </div>
-
             <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Status Pengangkutan</p>
@@ -858,7 +890,6 @@ export default function RekapProformaInvoicePage() {
                 </div>
               </div>
             </div>
-
             {getSuratMuatForPI(selectedItem.nomorPI).length > 0 && (
               <div className="overflow-x-auto">
                 <p className="text-sm font-semibold text-gray-700 mb-3">Riwayat Surat Muat</p>
@@ -873,6 +904,7 @@ export default function RekapProformaInvoicePage() {
                       <th className="px-4 py-3 text-right text-xs font-semibold text-green-800 uppercase border">Total KG</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">No. Polisi</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">Driver</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-green-800 uppercase border">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -892,13 +924,26 @@ export default function RekapProformaInvoicePage() {
                         <td className="px-4 py-3 text-sm font-bold text-gray-900 text-right font-mono border">{surat.totalKG.toLocaleString()}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 border">{surat.nomorPolisi}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 border">{surat.driverUnit}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 border">
+                          <div className="flex items-center gap-2 justify-center">
+                            <button onClick={() => handleEditSurat(surat)} className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Edit Surat">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button onClick={() => handleDeleteSurat(surat)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Hapus Surat">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -927,7 +972,6 @@ export default function RekapProformaInvoicePage() {
                 </tbody>
               </table>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-gray-50 rounded-xl">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Terbilang</p>
@@ -962,7 +1006,6 @@ export default function RekapProformaInvoicePage() {
                 </div>
               </div>
             </div>
-
             {selectedItem.ttdImage && (
               <div className="flex justify-end">
                 <div className="text-center p-4">
@@ -984,23 +1027,12 @@ export default function RekapProformaInvoicePage() {
       }>
         <form onSubmit={handleUpdateStatus} className="space-y-6">
           <div className="grid grid-cols-1 gap-6">
-            <Input
-              label="Sisa Pengambilan (KG)"
-              type="number"
-              value={editForm.sisaPengambilanKG}
-              onChange={(e) => setEditForm((prev) => ({ ...prev, sisaPengambilanKG: e.target.value }))}
-              placeholder="0"
-            />
-            <Select
-              label="Status Pengangkutan"
-              value={editForm.statusPengangkutan}
-              onChange={(e) => setEditForm((prev) => ({ ...prev, statusPengangkutan: e.target.value }))}
-              options={[
-                { value: "pending", label: "Belum Dimuat" },
-                { value: "partial", label: "Sebagian Dimuat" },
-                { value: "complete", label: "Selesai Dimuat" },
-              ]}
-            />
+            <Input label="Sisa Pengambilan (KG)" type="number" value={editForm.sisaPengambilanKG} onChange={(e) => setEditForm((prev) => ({ ...prev, sisaPengambilanKG: e.target.value }))} placeholder="0" />
+            <Select label="Status Pengangkutan" value={editForm.statusPengangkutan} onChange={(e) => setEditForm((prev) => ({ ...prev, statusPengangkutan: e.target.value }))} options={[
+              { value: "pending", label: "Belum Dimuat" },
+              { value: "partial", label: "Sebagian Dimuat" },
+              { value: "complete", label: "Selesai Dimuat" },
+            ]} />
           </div>
           {selectedItem && (
             <div className="p-4 bg-gray-50 rounded-xl">
@@ -1013,6 +1045,54 @@ export default function RekapProformaInvoicePage() {
               </div>
             </div>
           )}
+        </form>
+      </Modal>
+
+      <Modal isOpen={isEditSuratModalOpen} onClose={() => setIsEditSuratModalOpen(false)} title={`Edit Surat Muat - ${selectedSurat?.nomorSeri}`} size="lg" footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={() => setIsEditSuratModalOpen(false)}>Batal</Button>
+          <Button variant="primary" onClick={handleUpdateSurat} isLoading={isSubmitting}>Simpan Perubahan</Button>
+        </div>
+      }>
+        <form onSubmit={handleUpdateSurat} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input label="Tanggal" type="date" value={editSuratForm.tanggal} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, tanggal: e.target.value }))} required />
+            <Input label="Nomor Seri" type="text" value={editSuratForm.nomorSeri} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorSeri: e.target.value }))} required />
+            <Input label="Nomor Polisi" type="text" value={editSuratForm.nomorPolisi} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorPolisi: e.target.value }))} required />
+            <Input label="Driver Unit" type="text" value={editSuratForm.driverUnit} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, driverUnit: e.target.value }))} required />
+            <Input label="Nomor SIM" type="text" value={editSuratForm.nomorSIM} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorSIM: e.target.value }))} className="md:col-span-2" />
+          </div>
+          <div className="space-y-4">
+            <h4 className="text-sm font-semibold text-gray-700">Item Pengangkutan</h4>
+            {editSuratForm.items.map((item, idx) => (
+              <div key={idx} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h5 className="text-sm font-semibold text-gray-700">Item {idx + 1}</h5>
+                  {editSuratForm.items.length > 1 && (
+                    <button type="button" onClick={() => removeSuratItem(idx)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleSuratItemChange(idx, "nomorSubDO", e.target.value)} />
+                  <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleSuratItemChange(idx, "nomorPO", e.target.value)} />
+                  <Input label="Jenis Pupuk" type="text" value={item.jenisPupuk} onChange={(e) => handleSuratItemChange(idx, "jenisPupuk", e.target.value)} required />
+                  <Input label="Party" type="text" value={item.party} onChange={(e) => handleSuratItemChange(idx, "party", e.target.value)} />
+                  <Input label="Pengambilan (ZAK)" type="number" value={item.pengambilanZAK} onChange={(e) => handleSuratItemChange(idx, "pengambilanZAK", e.target.value)} required />
+                  <Input label="Sisa" type="text" value={item.sisa} onChange={(e) => handleSuratItemChange(idx, "sisa", e.target.value)} />
+                </div>
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={addSuratItem}>
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Tambah Item
+            </Button>
+          </div>
         </form>
       </Modal>
     </div>

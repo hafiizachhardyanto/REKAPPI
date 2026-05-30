@@ -10,6 +10,8 @@ import {
   deleteDoc,
   updateDoc,
   serverTimestamp,
+  getDoc,
+  where,
 } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -57,6 +59,24 @@ interface UnifiedTransaksi {
   nomorPIList?: string[];
 }
 
+interface StockItem {
+  id: string;
+  namaBarang: string;
+  bobotPerUnit: number;
+  stokAkhirUnit: number;
+  stokAkhirKG: number;
+  barangKeluarUnit: number;
+  barangKeluarKG: number;
+}
+
+interface ProformaInvoiceItem {
+  id: string;
+  nomorPI: string;
+  produkItems: Array<{ namaProduk: string; kuantitas: number }>;
+  sisaPengambilanKG?: number;
+  statusPengangkutan?: string;
+}
+
 export default function RiwayatTransaksiPage() {
   const { user } = useAuth();
   const [data, setData] = useState<UnifiedTransaksi[]>([]);
@@ -71,6 +91,8 @@ export default function RiwayatTransaksiPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fotList, setFotList] = useState<string[]>([]);
+  const [stockList, setStockList] = useState<StockItem[]>([]);
+  const [piList, setPiList] = useState<ProformaInvoiceItem[]>([]);
 
   const [editForm, setEditForm] = useState({
     tanggal: "",
@@ -88,8 +110,27 @@ export default function RiwayatTransaksiPage() {
     sopirNopol: "",
   });
 
+  const [editSuratForm, setEditSuratForm] = useState({
+    tanggal: "",
+    nomorSeri: "",
+    nomorPolisi: "",
+    driverUnit: "",
+    nomorSIM: "",
+    items: [] as Array<{
+      nomorSubDO: string;
+      nomorPO: string;
+      jenisPupuk: string;
+      party: string;
+      pengambilanZAK: string;
+      bobotPerUnit: number;
+      sisa: string;
+    }>,
+  });
+
   useEffect(() => {
     fetchData();
+    fetchStockGudang();
+    fetchProformaInvoice();
   }, []);
 
   const fetchData = async () => {
@@ -151,12 +192,9 @@ export default function RiwayatTransaksiPage() {
       });
 
       setData(allData);
-
       const fotSet = new Set<string>();
       allData.forEach((item) => {
-        if (item.fot && item.fot.trim()) {
-          fotSet.add(item.fot.trim().toUpperCase());
-        }
+        if (item.fot && item.fot.trim()) fotSet.add(item.fot.trim().toUpperCase());
       });
       setFotList(Array.from(fotSet).sort());
     } catch (error) {
@@ -164,6 +202,53 @@ export default function RiwayatTransaksiPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchStockGudang = async () => {
+    try {
+      const q = query(collection(db, "stockGudang"), orderBy("namaBarang", "asc"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        namaBarang: doc.data().namaBarang || "",
+        bobotPerUnit: doc.data().bobotPerUnit || 50,
+        stokAkhirUnit: doc.data().stokAkhirUnit || 0,
+        stokAkhirKG: doc.data().stokAkhirKG || 0,
+        barangKeluarUnit: doc.data().barangKeluarUnit || 0,
+        barangKeluarKG: doc.data().barangKeluarKG || 0,
+      } as StockItem));
+      setStockList(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const fetchProformaInvoice = async () => {
+    try {
+      const q = query(collection(db, "proformaInvoice"), orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        nomorPI: doc.data().nomorPI || "",
+        produkItems: doc.data().produkItems || [],
+        sisaPengambilanKG: doc.data().sisaPengambilanKG,
+        statusPengangkutan: doc.data().statusPengangkutan,
+      } as ProformaInvoiceItem));
+      setPiList(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const getStockForProduct = (namaProduk: string) => {
+    return stockList.find((s) =>
+      s.namaBarang.toUpperCase().includes(namaProduk.toUpperCase()) ||
+      namaProduk.toUpperCase().includes(s.namaBarang.toUpperCase())
+    );
+  };
+
+  const getPIByNomor = (nomorPI: string) => {
+    return piList.find((p) => p.nomorPI === nomorPI);
   };
 
   const filteredData = data.filter((item) => {
@@ -175,13 +260,11 @@ export default function RiwayatTransaksiPage() {
       (item.nomorPI && item.nomorPI.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (item.nomorSeri && item.nomorSeri.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (item.driverUnit && item.driverUnit.toLowerCase().includes(searchTerm.toLowerCase()));
-
     const matchJenis = filterJenis === "semua" ? true :
       filterJenis === "suratPengangkutan" ?
         (item.jenis === "suratPengangkutanGudangInduk" || item.jenis === "suratPengangkutanDO") :
         item.jenis === filterJenis;
     const matchFot = filterFot ? item.fot === filterFot : true;
-
     const matchBulanTahun = (() => {
       if (!filterBulan && !filterTahun) return true;
       const date = item.tanggal ? new Date(item.tanggal) : new Date();
@@ -189,7 +272,6 @@ export default function RiwayatTransaksiPage() {
       const matchTahun = filterTahun ? date.getFullYear().toString() === filterTahun : true;
       return matchBulan && matchTahun;
     })();
-
     return matchSearch && matchJenis && matchFot && matchBulanTahun;
   });
 
@@ -200,64 +282,53 @@ export default function RiwayatTransaksiPage() {
 
   const handleEdit = (item: UnifiedTransaksi) => {
     setSelectedItem(item);
-    setEditForm({
-      tanggal: item.tanggal,
-      kodeBarang: item.kodeBarang,
-      namaBarang: item.namaBarang,
-      unit: item.unit as "ZAK" | "DUS" | "KG" | "BOTOL",
-      jumlahZAK: item.jumlahZAK.toString(),
-      botolPerDus: item.botolPerDus ? item.botolPerDus.toString() : "",
-      bobotPerBotol: item.bobotPerBotol ? item.bobotPerBotol.toString() : "",
-      namaCustomer: item.namaCustomer || "",
-      nomorPI: item.nomorPI || "",
-      nomorInvoice: item.nomorInvoice || "",
-      nomorSuratPengangkutan: item.nomorSuratPengangkutan || "",
-      fot: item.fot,
-      sopirNopol: item.driverUnit || "",
-    });
+    if (item.jenis === "suratPengangkutanGudangInduk" || item.jenis === "suratPengangkutanDO") {
+      setEditSuratForm({
+        tanggal: item.tanggal,
+        nomorSeri: item.nomorSeri || "",
+        nomorPolisi: item.nomorPolisi || "",
+        driverUnit: item.driverUnit || "",
+        nomorSIM: item.nomorSIM || "",
+        items: (item.items || []).map((it) => ({
+          nomorSubDO: it.nomorSubDO || "",
+          nomorPO: it.nomorPO || "",
+          jenisPupuk: it.jenisPupuk || "",
+          party: it.party || "",
+          pengambilanZAK: String(it.pengambilanZAK || 0),
+          bobotPerUnit: it.bobotPerUnit || 50,
+          sisa: it.sisa || "",
+        })),
+      });
+    } else {
+      setEditForm({
+        tanggal: item.tanggal,
+        kodeBarang: item.kodeBarang,
+        namaBarang: item.namaBarang,
+        unit: item.unit as "ZAK" | "DUS" | "KG" | "BOTOL",
+        jumlahZAK: item.jumlahZAK.toString(),
+        botolPerDus: item.botolPerDus ? item.botolPerDus.toString() : "",
+        bobotPerBotol: item.bobotPerBotol ? item.bobotPerBotol.toString() : "",
+        namaCustomer: item.namaCustomer || "",
+        nomorPI: item.nomorPI || "",
+        nomorInvoice: item.nomorInvoice || "",
+        nomorSuratPengangkutan: item.nomorSuratPengangkutan || "",
+        fot: item.fot,
+        sopirNopol: item.driverUnit || "",
+      });
+    }
     setIsEditModalOpen(true);
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
-
     setIsSubmitting(true);
     try {
-      let collectionName = "";
-      if (selectedItem.jenis === "barangMasuk") collectionName = "transaksiBarangMasuk";
-      else collectionName = "transaksiBarangKeluar";
-
-      const jumlahZAK = parseFloat(editForm.jumlahZAK) || 0;
-      const botolPerDus = editForm.unit === "BOTOL" ? parseFloat(editForm.botolPerDus) || 0 : null;
-      const bobotPerBotol = editForm.unit === "BOTOL" ? parseFloat(editForm.bobotPerBotol) || 0 : null;
-
-      const updateData: any = {
-        tanggal: editForm.tanggal,
-        kodeBarang: editForm.kodeBarang,
-        namaBarang: editForm.namaBarang,
-        unit: editForm.unit,
-        jumlahZAK: jumlahZAK,
-        fot: editForm.fot.trim().toUpperCase(),
-        updatedAt: serverTimestamp(),
-      };
-
-      if (editForm.unit === "BOTOL") {
-        updateData.botolPerDus = botolPerDus;
-        updateData.bobotPerBotol = bobotPerBotol;
+      if (selectedItem.jenis === "suratPengangkutanGudangInduk" || selectedItem.jenis === "suratPengangkutanDO") {
+        await handleUpdateSuratPengangkutan();
+      } else {
+        await handleUpdateRegular();
       }
-
-      if (selectedItem.jenis === "barangMasuk") {
-        updateData.sopirNopol = editForm.sopirNopol.trim();
-      } else if (selectedItem.jenis === "barangKeluar") {
-        updateData.namaCustomer = editForm.namaCustomer.trim();
-        updateData.nomorPI = editForm.nomorPI.trim();
-        updateData.nomorInvoice = editForm.nomorInvoice.trim();
-        updateData.nomorSuratPengangkutan = editForm.nomorSuratPengangkutan.trim();
-      }
-
-      await updateDoc(doc(db, collectionName, selectedItem.id), updateData);
-
       setIsEditModalOpen(false);
       fetchData();
     } catch (error) {
@@ -267,18 +338,180 @@ export default function RiwayatTransaksiPage() {
     }
   };
 
+  const handleUpdateRegular = async () => {
+    let collectionName = "";
+    if (selectedItem!.jenis === "barangMasuk") collectionName = "transaksiBarangMasuk";
+    else collectionName = "transaksiBarangKeluar";
+    const jumlahZAK = parseFloat(editForm.jumlahZAK) || 0;
+    const botolPerDus = editForm.unit === "BOTOL" ? parseFloat(editForm.botolPerDus) || 0 : null;
+    const bobotPerBotol = editForm.unit === "BOTOL" ? parseFloat(editForm.bobotPerBotol) || 0 : null;
+    const updateData: any = {
+      tanggal: editForm.tanggal,
+      kodeBarang: editForm.kodeBarang,
+      namaBarang: editForm.namaBarang,
+      unit: editForm.unit,
+      jumlahZAK: jumlahZAK,
+      fot: editForm.fot.trim().toUpperCase(),
+      updatedAt: serverTimestamp(),
+    };
+    if (editForm.unit === "BOTOL") {
+      updateData.botolPerDus = botolPerDus;
+      updateData.bobotPerBotol = bobotPerBotol;
+    }
+    if (selectedItem!.jenis === "barangMasuk") {
+      updateData.sopirNopol = editForm.sopirNopol.trim();
+    } else if (selectedItem!.jenis === "barangKeluar") {
+      updateData.namaCustomer = editForm.namaCustomer.trim();
+      updateData.nomorPI = editForm.nomorPI.trim();
+      updateData.nomorInvoice = editForm.nomorInvoice.trim();
+      updateData.nomorSuratPengangkutan = editForm.nomorSuratPengangkutan.trim();
+    }
+    await updateDoc(doc(db, collectionName, selectedItem!.id), updateData);
+  };
+
+  const handleUpdateSuratPengangkutan = async () => {
+    const oldItems = selectedItem!.items || [];
+    const newItems = editSuratForm.items.map((it) => ({
+      nomorSubDO: it.nomorSubDO,
+      nomorPO: it.nomorPO,
+      jenisPupuk: it.jenisPupuk,
+      party: it.party,
+      pengambilanZAK: parseFloat(it.pengambilanZAK) || 0,
+      bobotPerUnit: it.bobotPerUnit,
+      totalKG: (parseFloat(it.pengambilanZAK) || 0) * it.bobotPerUnit,
+      sisa: it.sisa,
+      fot: "",
+    }));
+    const totalPengambilanKG = newItems.reduce((sum, it) => sum + it.totalKG, 0);
+    const updateData: any = {
+      tanggal: editSuratForm.tanggal,
+      nomorSeri: editSuratForm.nomorSeri.trim(),
+      nomorPolisi: editSuratForm.nomorPolisi.trim(),
+      driverUnit: editSuratForm.driverUnit.trim(),
+      nomorSIM: editSuratForm.nomorSIM.trim() || null,
+      items: newItems,
+      totalPengambilanKG: totalPengambilanKG,
+      updatedAt: serverTimestamp(),
+    };
+    await updateDoc(doc(db, "transaksiBarangKeluar", selectedItem!.id), updateData);
+    await updateDoc(doc(db, "suratPengangkutan", selectedItem!.id), updateData);
+
+    if (selectedItem!.jenis === "suratPengangkutanGudangInduk" && selectedItem!.nomorPI) {
+      const pi = getPIByNomor(selectedItem!.nomorPI);
+      if (pi) {
+        const oldTotalKG = oldItems.reduce((sum, it) => sum + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50)), 0);
+        const delta = oldTotalKG - totalPengambilanKG;
+        const piRef = doc(db, "proformaInvoice", pi.id);
+        const piSnap = await getDoc(piRef);
+        if (piSnap.exists()) {
+          const piData = piSnap.data();
+          const currentSisa = piData.sisaPengambilanKG !== undefined ? piData.sisaPengambilanKG : 0;
+          const newSisa = Math.max(0, currentSisa + delta);
+          await updateDoc(piRef, {
+            sisaPengambilanKG: newSisa,
+            statusPengangkutan: newSisa <= 0 ? "complete" : (totalPengambilanKG > 0 ? "partial" : "pending"),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+    }
+
+    const productMapOld: Record<string, number> = {};
+    const productMapNew: Record<string, number> = {};
+    oldItems.forEach((it) => {
+      const key = it.jenisPupuk;
+      productMapOld[key] = (productMapOld[key] || 0) + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50));
+    });
+    newItems.forEach((it) => {
+      const key = it.jenisPupuk;
+      productMapNew[key] = (productMapNew[key] || 0) + (it.totalKG || 0);
+    });
+    const allProducts = new Set([...Object.keys(productMapOld), ...Object.keys(productMapNew)]);
+    for (const prod of allProducts) {
+      const oldKG = productMapOld[prod] || 0;
+      const newKG = productMapNew[prod] || 0;
+      const deltaKG = oldKG - newKG;
+      const stock = getStockForProduct(prod);
+      if (stock && deltaKG !== 0) {
+        const stockRef = doc(db, "stockGudang", stock.id);
+        const stockSnap = await getDoc(stockRef);
+        if (stockSnap.exists()) {
+          const sData = stockSnap.data();
+          const currentUnit = sData.stokAkhirUnit || 0;
+          const currentKG = sData.stokAkhirKG || 0;
+          const currentKeluarUnit = sData.barangKeluarUnit || 0;
+          const currentKeluarKG = sData.barangKeluarKG || 0;
+          const bobot = stock.bobotPerUnit || 50;
+          const deltaUnit = deltaKG / bobot;
+          await updateDoc(stockRef, {
+            stokAkhirUnit: Math.max(0, currentUnit + deltaUnit),
+            stokAkhirKG: Math.max(0, currentKG + deltaKG),
+            barangKeluarUnit: Math.max(0, currentKeluarUnit - deltaUnit),
+            barangKeluarKG: Math.max(0, currentKeluarKG - deltaKG),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+    }
+  };
+
   const handleDelete = async (item: UnifiedTransaksi) => {
     let collectionName = "";
     if (item.jenis === "barangMasuk") collectionName = "transaksiBarangMasuk";
     else collectionName = "transaksiBarangKeluar";
-
     const jenisLabel = item.jenis === "barangMasuk" ? "Barang Masuk" :
       item.jenis === "suratPengangkutanGudangInduk" ? "Surat Pengangkutan Gudang Induk" :
       item.jenis === "suratPengangkutanDO" ? "Surat Pengangkutan DO" : "Barang Keluar";
-
     if (!confirm(`Apakah Anda yakin ingin menghapus data ${jenisLabel} ini?`)) return;
-
     try {
+      if (item.jenis === "suratPengangkutanGudangInduk" && item.nomorPI) {
+        const pi = getPIByNomor(item.nomorPI);
+        if (pi) {
+          const totalKG = (item.items || []).reduce((sum, it) => sum + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50)), 0);
+          const piRef = doc(db, "proformaInvoice", pi.id);
+          const piSnap = await getDoc(piRef);
+          if (piSnap.exists()) {
+            const piData = piSnap.data();
+            const currentSisa = piData.sisaPengambilanKG !== undefined ? piData.sisaPengambilanKG : 0;
+            const newSisa = currentSisa + totalKG;
+            await updateDoc(piRef, {
+              sisaPengambilanKG: newSisa,
+              statusPengangkutan: newSisa > 0 ? "partial" : "pending",
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+        const productMap: Record<string, number> = {};
+        (item.items || []).forEach((it) => {
+          const key = it.jenisPupuk;
+          productMap[key] = (productMap[key] || 0) + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50));
+        });
+        for (const prod of Object.keys(productMap)) {
+          const kg = productMap[prod];
+          const stock = getStockForProduct(prod);
+          if (stock) {
+            const stockRef = doc(db, "stockGudang", stock.id);
+            const stockSnap = await getDoc(stockRef);
+            if (stockSnap.exists()) {
+              const sData = stockSnap.data();
+              const currentUnit = sData.stokAkhirUnit || 0;
+              const currentKG = sData.stokAkhirKG || 0;
+              const currentKeluarUnit = sData.barangKeluarUnit || 0;
+              const currentKeluarKG = sData.barangKeluarKG || 0;
+              const bobot = stock.bobotPerUnit || 50;
+              const unit = kg / bobot;
+              await updateDoc(stockRef, {
+                stokAkhirUnit: currentUnit + unit,
+                stokAkhirKG: currentKG + kg,
+                barangKeluarUnit: Math.max(0, currentKeluarUnit - unit),
+                barangKeluarKG: Math.max(0, currentKeluarKG - kg),
+                updatedAt: serverTimestamp(),
+              });
+            }
+          }
+        }
+        await deleteDoc(doc(db, "suratPengangkutan", item.id));
+      }
       await deleteDoc(doc(db, collectionName, item.id));
       fetchData();
     } catch (error) {
@@ -315,7 +548,6 @@ export default function RiwayatTransaksiPage() {
   const handlePrintSuratPDF = (item: UnifiedTransaksi) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-
     const itemsHtml = (item.items || [])
       .map(
         (it, idx) => `
@@ -331,11 +563,9 @@ export default function RiwayatTransaksiPage() {
     `
       )
       .join("");
-
     const piListHtml = item.nomorPIList && item.nomorPIList.length > 0
       ? item.nomorPIList.map((pi) => `<span style="display: inline-block; background: #dcfce7; padding: 2px 8px; border-radius: 4px; margin-right: 4px; font-size: 10px;">${pi}</span>`).join("")
       : "-";
-
     const html = `
       <!DOCTYPE html>
       <html>
@@ -465,7 +695,6 @@ export default function RiwayatTransaksiPage() {
       </body>
       </html>
     `;
-
     printWindow.document.write(html);
     printWindow.document.close();
   };
@@ -529,9 +758,7 @@ export default function RiwayatTransaksiPage() {
 
   const getTotalKGForSurat = (item: UnifiedTransaksi) => {
     if (item.totalPengambilanKG) return item.totalPengambilanKG;
-    if (item.items) {
-      return item.items.reduce((sum, it) => sum + (it.totalKG || 0), 0);
-    }
+    if (item.items) return item.items.reduce((sum, it) => sum + (it.totalKG || 0), 0);
     return 0;
   };
 
@@ -550,9 +777,7 @@ export default function RiwayatTransaksiPage() {
       key: "tanggal",
       header: "Tanggal",
       width: "120px",
-      render: (row: UnifiedTransaksi) => (
-        <span className="font-medium text-gray-800">{row.tanggal}</span>
-      ),
+      render: (row: UnifiedTransaksi) => <span className="font-medium text-gray-800">{row.tanggal}</span>,
     },
     {
       key: "nomorSeri",
@@ -560,13 +785,9 @@ export default function RiwayatTransaksiPage() {
       width: "180px",
       render: (row: UnifiedTransaksi) => (
         row.nomorSeri ? (
-          <span className="font-mono font-bold text-green-700 bg-green-50 px-2 py-1 rounded text-xs">
-            {row.nomorSeri}
-          </span>
+          <span className="font-mono font-bold text-green-700 bg-green-50 px-2 py-1 rounded text-xs">{row.nomorSeri}</span>
         ) : (
-          <span className="font-mono font-bold text-green-700 bg-green-50 px-2 py-1 rounded text-xs">
-            {row.kodeBarang || "-"}
-          </span>
+          <span className="font-mono font-bold text-green-700 bg-green-50 px-2 py-1 rounded text-xs">{row.kodeBarang || "-"}</span>
         )
       ),
     },
@@ -581,9 +802,7 @@ export default function RiwayatTransaksiPage() {
               {row.nomorPIList && row.nomorPIList.length > 0 && (
                 <p className="text-xs text-gray-500">PI: {row.nomorPIList.join(", ")}</p>
               )}
-              {getTotalKGForSurat(row) > 0 && (
-                <p className="text-xs text-gray-500">{getTotalKGForSurat(row).toLocaleString()} KG</p>
-              )}
+              {getTotalKGForSurat(row) > 0 && <p className="text-xs text-gray-500">{getTotalKGForSurat(row).toLocaleString()} KG</p>}
             </div>
           ) : (
             <span className="font-semibold text-gray-800">{row.namaBarang}</span>
@@ -624,9 +843,7 @@ export default function RiwayatTransaksiPage() {
       header: "FOT",
       width: "100px",
       render: (row: UnifiedTransaksi) => (
-        <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded">
-          {row.fot || "-"}
-        </span>
+        <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded">{row.fot || "-"}</span>
       ),
     },
     {
@@ -635,41 +852,25 @@ export default function RiwayatTransaksiPage() {
       width: "150px",
       render: (row: UnifiedTransaksi) => (
         <div className="flex items-center gap-2">
-          <button
-            onClick={(e) => { e.stopPropagation(); handleDetail(row); }}
-            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="Detail"
-          >
+          <button onClick={(e) => { e.stopPropagation(); handleDetail(row); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Detail">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </button>
           {(row.jenis === "suratPengangkutanGudangInduk" || row.jenis === "suratPengangkutanDO") && (
-            <button
-              onClick={(e) => { e.stopPropagation(); handlePrintSuratPDF(row); }}
-              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-              title="Print PDF"
-            >
+            <button onClick={(e) => { e.stopPropagation(); handlePrintSuratPDF(row); }} className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors" title="Print PDF">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
               </svg>
             </button>
           )}
-          <button
-            onClick={(e) => { e.stopPropagation(); handleEdit(row); }}
-            className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-            title="Edit"
-          >
+          <button onClick={(e) => { e.stopPropagation(); handleEdit(row); }} className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Edit">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(row); }}
-            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Hapus"
-          >
+          <button onClick={(e) => { e.stopPropagation(); handleDelete(row); }} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Hapus">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
@@ -682,8 +883,30 @@ export default function RiwayatTransaksiPage() {
   const getTotalMasuk = () => filteredData.filter((d) => d.jenis === "barangMasuk").length;
   const getTotalKeluar = () => filteredData.filter((d) => d.jenis === "barangKeluar").length;
   const getTotalSurat = () => filteredData.filter((d) => d.jenis === "suratPengangkutanGudangInduk" || d.jenis === "suratPengangkutanDO").length;
-
   const isBotol = editForm.unit === "BOTOL";
+  const isSuratEdit = selectedItem?.jenis === "suratPengangkutanGudangInduk" || selectedItem?.jenis === "suratPengangkutanDO";
+
+  const handleSuratItemChange = (idx: number, field: string, value: string) => {
+    setEditSuratForm((prev) => {
+      const newItems = [...prev.items];
+      newItems[idx] = { ...newItems[idx], [field]: value };
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const addSuratItem = () => {
+    setEditSuratForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { nomorSubDO: "", nomorPO: "", jenisPupuk: "", party: "", pengambilanZAK: "", bobotPerUnit: 50, sisa: "" }],
+    }));
+  };
+
+  const removeSuratItem = (idx: number) => {
+    setEditSuratForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== idx),
+    }));
+  };
 
   return (
     <div className="space-y-6">
@@ -788,7 +1011,6 @@ export default function RiwayatTransaksiPage() {
                     </div>
                   </div>
                 )}
-
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
@@ -819,14 +1041,12 @@ export default function RiwayatTransaksiPage() {
                     </tbody>
                   </table>
                 </div>
-
                 {getTotalKGForSurat(selectedItem) > 0 && (
                   <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
                     <p className="text-xs text-amber-600 uppercase tracking-wide font-semibold">Total Pengambilan</p>
                     <p className="text-2xl font-bold text-amber-700 font-mono">{getTotalKGForSurat(selectedItem).toLocaleString()} KG</p>
                   </div>
                 )}
-
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
                     <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Nomor Polisi</p>
@@ -886,7 +1106,6 @@ export default function RiwayatTransaksiPage() {
                 )}
               </>
             )}
-
             <div className="p-4 bg-gray-50 rounded-xl">
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Informasi Tambahan</p>
               <div className="grid grid-cols-2 gap-2 text-sm">
@@ -898,41 +1117,84 @@ export default function RiwayatTransaksiPage() {
         )}
       </Modal>
 
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Edit ${selectedItem?.jenis === "barangMasuk" ? "Transaksi Barang Masuk" : "Transaksi Barang Keluar"}`} size="lg" footer={
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={isSuratEdit ? "Edit Surat Pengangkutan" : `Edit ${selectedItem?.jenis === "barangMasuk" ? "Transaksi Barang Masuk" : "Transaksi Barang Keluar"}`} size="lg" footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Batal</Button>
           <Button variant="primary" onClick={handleUpdate} isLoading={isSubmitting}>Simpan Perubahan</Button>
         </div>
       }>
-        <form onSubmit={handleUpdate} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input label="Tanggal" type="date" value={editForm.tanggal} onChange={(e) => setEditForm((prev) => ({ ...prev, tanggal: e.target.value }))} required />
-            <Input label="Kode Barang" type="text" value={editForm.kodeBarang} onChange={(e) => setEditForm((prev) => ({ ...prev, kodeBarang: e.target.value }))} required />
-            <Input label="Nama Barang" type="text" value={editForm.namaBarang} onChange={(e) => setEditForm((prev) => ({ ...prev, namaBarang: e.target.value }))} required />
-            <Select label="Unit" value={editForm.unit} onChange={(e) => setEditForm((prev) => ({ ...prev, unit: e.target.value as "ZAK" | "DUS" | "KG" | "BOTOL" }))} options={unitOptions} required />
-            <Input label={`Jumlah (${editForm.unit === "KG" ? "KG" : "ZAK"})`} type="number" value={editForm.jumlahZAK} onChange={(e) => setEditForm((prev) => ({ ...prev, jumlahZAK: e.target.value }))} required />
-            <Input label="FOT" type="text" value={editForm.fot} onChange={(e) => setEditForm((prev) => ({ ...prev, fot: e.target.value }))} required />
-          </div>
-          {isBotol && (
+        {isSuratEdit ? (
+          <form onSubmit={handleUpdate} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input label="Botol per DUS" type="number" value={editForm.botolPerDus} onChange={(e) => setEditForm((prev) => ({ ...prev, botolPerDus: e.target.value }))} />
-              <Input label="Bobot Per Botol (ml)" type="number" value={editForm.bobotPerBotol} onChange={(e) => setEditForm((prev) => ({ ...prev, bobotPerBotol: e.target.value }))} />
+              <Input label="Tanggal" type="date" value={editSuratForm.tanggal} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, tanggal: e.target.value }))} required />
+              <Input label="Nomor Seri" type="text" value={editSuratForm.nomorSeri} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorSeri: e.target.value }))} required />
+              <Input label="Nomor Polisi" type="text" value={editSuratForm.nomorPolisi} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorPolisi: e.target.value }))} required />
+              <Input label="Driver Unit" type="text" value={editSuratForm.driverUnit} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, driverUnit: e.target.value }))} required />
+              <Input label="Nomor SIM" type="text" value={editSuratForm.nomorSIM} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorSIM: e.target.value }))} className="md:col-span-2" />
             </div>
-          )}
-          {selectedItem?.jenis === "barangMasuk" && (
-            <Input label="Sopir / Nopol" type="text" value={editForm.sopirNopol} onChange={(e) => setEditForm((prev) => ({ ...prev, sopirNopol: e.target.value }))} required />
-          )}
-          {selectedItem?.jenis === "barangKeluar" && (
-            <>
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-gray-700">Item Pengangkutan</h4>
+              {editSuratForm.items.map((item, idx) => (
+                <div key={idx} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h5 className="text-sm font-semibold text-gray-700">Item {idx + 1}</h5>
+                    {editSuratForm.items.length > 1 && (
+                      <button type="button" onClick={() => removeSuratItem(idx)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleSuratItemChange(idx, "nomorSubDO", e.target.value)} />
+                    <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleSuratItemChange(idx, "nomorPO", e.target.value)} />
+                    <Input label="Jenis Pupuk" type="text" value={item.jenisPupuk} onChange={(e) => handleSuratItemChange(idx, "jenisPupuk", e.target.value)} required />
+                    <Input label="Party" type="text" value={item.party} onChange={(e) => handleSuratItemChange(idx, "party", e.target.value)} />
+                    <Input label="Pengambilan (ZAK)" type="number" value={item.pengambilanZAK} onChange={(e) => handleSuratItemChange(idx, "pengambilanZAK", e.target.value)} required />
+                    <Input label="Sisa" type="text" value={item.sisa} onChange={(e) => handleSuratItemChange(idx, "sisa", e.target.value)} />
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addSuratItem}>
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Tambah Item
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleUpdate} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input label="Tanggal" type="date" value={editForm.tanggal} onChange={(e) => setEditForm((prev) => ({ ...prev, tanggal: e.target.value }))} required />
+              <Input label="Kode Barang" type="text" value={editForm.kodeBarang} onChange={(e) => setEditForm((prev) => ({ ...prev, kodeBarang: e.target.value }))} required />
+              <Input label="Nama Barang" type="text" value={editForm.namaBarang} onChange={(e) => setEditForm((prev) => ({ ...prev, namaBarang: e.target.value }))} required />
+              <Select label="Unit" value={editForm.unit} onChange={(e) => setEditForm((prev) => ({ ...prev, unit: e.target.value as "ZAK" | "DUS" | "KG" | "BOTOL" }))} options={unitOptions} required />
+              <Input label={`Jumlah (${editForm.unit === "KG" ? "KG" : "ZAK"})`} type="number" value={editForm.jumlahZAK} onChange={(e) => setEditForm((prev) => ({ ...prev, jumlahZAK: e.target.value }))} required />
+              <Input label="FOT" type="text" value={editForm.fot} onChange={(e) => setEditForm((prev) => ({ ...prev, fot: e.target.value }))} required />
+            </div>
+            {isBotol && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input label="Nama Customer" type="text" value={editForm.namaCustomer} onChange={(e) => setEditForm((prev) => ({ ...prev, namaCustomer: e.target.value }))} required />
-                <Input label="No PI / Proforma Invoice" type="text" value={editForm.nomorPI} onChange={(e) => setEditForm((prev) => ({ ...prev, nomorPI: e.target.value }))} required />
-                <Input label="No Invoice" type="text" value={editForm.nomorInvoice} onChange={(e) => setEditForm((prev) => ({ ...prev, nomorInvoice: e.target.value }))} required />
-                <Input label="Nomor Surat Pengangkutan" type="text" value={editForm.nomorSuratPengangkutan} onChange={(e) => setEditForm((prev) => ({ ...prev, nomorSuratPengangkutan: e.target.value }))} required />
+                <Input label="Botol per DUS" type="number" value={editForm.botolPerDus} onChange={(e) => setEditForm((prev) => ({ ...prev, botolPerDus: e.target.value }))} />
+                <Input label="Bobot Per Botol (ml)" type="number" value={editForm.bobotPerBotol} onChange={(e) => setEditForm((prev) => ({ ...prev, bobotPerBotol: e.target.value }))} />
               </div>
-            </>
-          )}
-        </form>
+            )}
+            {selectedItem?.jenis === "barangMasuk" && (
+              <Input label="Sopir / Nopol" type="text" value={editForm.sopirNopol} onChange={(e) => setEditForm((prev) => ({ ...prev, sopirNopol: e.target.value }))} required />
+            )}
+            {selectedItem?.jenis === "barangKeluar" && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Input label="Nama Customer" type="text" value={editForm.namaCustomer} onChange={(e) => setEditForm((prev) => ({ ...prev, namaCustomer: e.target.value }))} required />
+                  <Input label="No PI / Proforma Invoice" type="text" value={editForm.nomorPI} onChange={(e) => setEditForm((prev) => ({ ...prev, nomorPI: e.target.value }))} required />
+                  <Input label="No Invoice" type="text" value={editForm.nomorInvoice} onChange={(e) => setEditForm((prev) => ({ ...prev, nomorInvoice: e.target.value }))} required />
+                  <Input label="Nomor Surat Pengangkutan" type="text" value={editForm.nomorSuratPengangkutan} onChange={(e) => setEditForm((prev) => ({ ...prev, nomorSuratPengangkutan: e.target.value }))} required />
+                </div>
+              </>
+            )}
+          </form>
+        )}
       </Modal>
     </div>
   );
