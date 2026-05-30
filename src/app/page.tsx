@@ -151,26 +151,10 @@ const PalmPlantationBackground = () => {
   );
 };
 
-interface HargaProduk {
-  id: string;
-  kodeBarang: string;
-  namaProduk: string;
-  jenisProduk: string;
-  jenisUnit: "ZAK" | "BOTOL";
-  hargaPerKg?: number;
-  hargaPerZak?: number;
-  hargaPerLiter?: number;
-  hargaPerDus?: number;
-  createdAt?: any;
-}
-
 export default function PublicPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"stock" | "harga">("stock");
   const [stockData, setStockData] = useState<StockGudang[]>([]);
-  const [hargaData, setHargaData] = useState<HargaProduk[]>([]);
   const [isLoadingStock, setIsLoadingStock] = useState(true);
-  const [isLoadingHarga, setIsLoadingHarga] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFot, setSelectedFot] = useState("");
   const [selectedBulan, setSelectedBulan] = useState("");
@@ -178,22 +162,20 @@ export default function PublicPage() {
   const [fotList, setFotList] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [filterUnitHarga, setFilterUnitHarga] = useState("");
 
   useEffect(() => {
     fetchStockData();
-    fetchHargaData();
   }, []);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedFot, selectedBulan, selectedTahun, searchTerm, itemsPerPage, activeTab, filterUnitHarga]);
+  }, [selectedFot, selectedBulan, selectedTahun, searchTerm, itemsPerPage]);
 
   const fetchStockData = async () => {
     try {
       const q = query(collection(db, "stockGudang"), orderBy("kodeBarang", "asc"));
       const snapshot = await getDocs(q);
-      const items = snapshot.docs.map((doc) => ({
+      const items: StockGudang[] = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate(),
@@ -202,7 +184,7 @@ export default function PublicPage() {
       setStockData(items);
 
       const fotSet = new Set<string>();
-      items.forEach((item) => {
+      items.forEach((item: StockGudang) => {
         if (item.fot && typeof item.fot === "string" && item.fot.trim()) {
           fotSet.add(item.fot.trim().toUpperCase());
         }
@@ -215,24 +197,7 @@ export default function PublicPage() {
     }
   };
 
-  const fetchHargaData = async () => {
-    try {
-      const q = query(collection(db, "daftarHarga"), orderBy("kodeBarang", "asc"));
-      const snapshot = await getDocs(q);
-      const items = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-      } as HargaProduk));
-      setHargaData(items);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsLoadingHarga(false);
-    }
-  };
-
-  const filteredStockData = stockData.filter((item) => {
+  const filteredStockData = stockData.filter((item: StockGudang) => {
     const matchSearch =
       item.kodeBarang.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.namaBarang.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -248,25 +213,13 @@ export default function PublicPage() {
     return matchSearch && matchFot && matchBulanTahun;
   });
 
-  const filteredHargaData = hargaData.filter((item) => {
-    const matchSearch =
-      item.kodeBarang.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.namaProduk.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.jenisProduk.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchUnit = filterUnitHarga ? item.jenisUnit === filterUnitHarga : true;
-    return matchSearch && matchUnit;
-  });
-
-  const activeData = activeTab === "stock" ? filteredStockData : filteredHargaData;
-  const isLoading = activeTab === "stock" ? isLoadingStock : isLoadingHarga;
-
-  const totalPages = Math.ceil(activeData.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredStockData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedData = activeData.slice(startIndex, endIndex);
+  const paginatedData = filteredStockData.slice(startIndex, endIndex);
 
   const pageNumbers = useMemo(() => {
-    const pages = [];
+    const pages: number[] = [];
     const maxVisible = 5;
     let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
     let endPage = Math.min(totalPages, startPage + maxVisible - 1);
@@ -305,13 +258,7 @@ export default function PublicPage() {
 
   const fotOptions = [
     { value: "", label: "Semua FOT" },
-    ...fotList.map((f) => ({ value: f, label: f })),
-  ];
-
-  const unitOptions = [
-    { value: "", label: "Semua Unit" },
-    { value: "ZAK", label: "ZAK" },
-    { value: "BOTOL", label: "BOTOL" },
+    ...fotList.map((f: string) => ({ value: f, label: f })),
   ];
 
   const getUnitBadgeClass = (unit: string) => {
@@ -343,18 +290,10 @@ export default function PublicPage() {
     return { label: "Aman", color: "bg-green-100 text-green-700 border-green-200" };
   };
 
-  const formatRupiah = (value: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
-
   const getTotalUnit = (unitType: string) => {
     return filteredStockData
-      .filter((d) => d.unit === unitType)
-      .reduce((sum, d) => sum + (d.stokAkhirUnit || 0), 0);
+      .filter((d: StockGudang) => d.unit === unitType)
+      .reduce((sum: number, d: StockGudang) => sum + (d.stokAkhirUnit || 0), 0);
   };
 
   const stockColumns = [
@@ -475,84 +414,6 @@ export default function PublicPage() {
     },
   ];
 
-  const hargaColumns = [
-    {
-      key: "kodeBarang",
-      header: "Kode",
-      width: "120px",
-      render: (row: HargaProduk) => (
-        <span className="font-mono font-semibold text-green-700 bg-green-50 px-2 py-1 rounded">
-          {row.kodeBarang}
-        </span>
-      ),
-    },
-    {
-      key: "namaProduk",
-      header: "Nama Produk",
-      render: (row: HargaProduk) => (
-        <span className="font-medium text-gray-800">{row.namaProduk}</span>
-      ),
-    },
-    {
-      key: "jenisProduk",
-      header: "Jenis",
-      width: "120px",
-      render: (row: HargaProduk) => (
-        <span className="text-gray-600">{row.jenisProduk || "-"}</span>
-      ),
-    },
-    {
-      key: "jenisUnit",
-      header: "Unit",
-      width: "90px",
-      render: (row: HargaProduk) => (
-        <span className={`px-2 py-1 rounded-md text-xs font-bold border ${
-          row.jenisUnit === "ZAK" ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-pink-100 text-pink-700 border-pink-200"
-        }`}>
-          {row.jenisUnit}
-        </span>
-      ),
-    },
-    {
-      key: "hargaKecil",
-      header: "Harga per Unit Kecil",
-      width: "160px",
-      render: (row: HargaProduk) => (
-        <div className="text-right">
-          <div className="font-mono font-semibold text-gray-800">
-            {row.jenisUnit === "ZAK" && row.hargaPerKg
-              ? formatRupiah(row.hargaPerKg)
-              : row.hargaPerLiter
-              ? formatRupiah(row.hargaPerLiter)
-              : "-"}
-          </div>
-          <div className="text-xs text-gray-500">
-            {row.jenisUnit === "ZAK" ? "per KG" : "per Liter"}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "hargaBesar",
-      header: "Harga per Unit Besar",
-      width: "160px",
-      render: (row: HargaProduk) => (
-        <div className="text-right">
-          <div className="font-mono font-semibold text-green-700">
-            {row.jenisUnit === "ZAK" && row.hargaPerZak
-              ? formatRupiah(row.hargaPerZak)
-              : row.hargaPerDus
-              ? formatRupiah(row.hargaPerDus)
-              : "-"}
-          </div>
-          <div className="text-xs text-gray-500">
-            {row.jenisUnit === "ZAK" ? "per ZAK" : "per Dus"}
-          </div>
-        </div>
-      ),
-    },
-  ];
-
   return (
     <>
       <style jsx global>{`
@@ -660,53 +521,16 @@ export default function PublicPage() {
             <h2 className="text-3xl sm:text-4xl font-bold text-green-900 mb-3">PT Bukit Agrochemical</h2>
             <p className="text-lg text-green-700 mb-2">Sistem Administrasi Distributor Pupuk</p>
             <p className="text-sm text-gray-500 max-w-2xl mx-auto">
-              Platform digital untuk monitoring stock gudang dan daftar harga produk pupuk secara real-time.
+              Platform digital untuk monitoring stock gudang secara real-time.
             </p>
           </section>
 
           <section className="animate-fade-in-up animate-delay-200">
-            <div className="flex justify-center mb-6">
-              <div className="inline-flex bg-white/80 backdrop-blur-md rounded-xl p-1.5 shadow-lg border border-green-200">
-                <button
-                  onClick={() => setActiveTab("stock")}
-                  className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
-                    activeTab === "stock"
-                      ? "bg-green-600 text-white shadow-md"
-                      : "text-gray-600 hover:bg-green-50 hover:text-green-700"
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                  Laporan Stock Gudang
-                </button>
-                <button
-                  onClick={() => setActiveTab("harga")}
-                  className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
-                    activeTab === "harga"
-                      ? "bg-amber-600 text-white shadow-md"
-                      : "text-gray-600 hover:bg-amber-50 hover:text-amber-700"
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Daftar Harga Produk
-                </button>
-              </div>
-            </div>
-
             <Card className="bg-white/85 backdrop-blur-md">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900">
-                    {activeTab === "stock" ? "Laporan Stock Gudang" : "Daftar Harga Produk"}
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    {activeTab === "stock"
-                      ? "Data persediaan barang per lokasi FOT"
-                      : "Data harga produk pupuk per unit"}
-                  </p>
+                  <h3 className="text-xl font-bold text-gray-900">Laporan Stock Gudang</h3>
+                  <p className="text-sm text-gray-500">Data persediaan barang per lokasi FOT</p>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -717,119 +541,69 @@ export default function PublicPage() {
                 </div>
               </div>
 
-              {activeTab === "stock" ? (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                    <Select
-                      label="Filter FOT"
-                      value={selectedFot}
-                      onChange={(e) => setSelectedFot(e.target.value)}
-                      options={fotOptions}
-                    />
-                    <Select
-                      label="Filter Bulan"
-                      value={selectedBulan}
-                      onChange={(e) => setSelectedBulan(e.target.value)}
-                      options={bulanOptions}
-                    />
-                    <Select
-                      label="Filter Tahun"
-                      value={selectedTahun}
-                      onChange={(e) => setSelectedTahun(e.target.value)}
-                      options={tahunOptions}
-                    />
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <Select
+                  label="Filter FOT"
+                  value={selectedFot}
+                  onChange={(e) => setSelectedFot(e.target.value)}
+                  options={fotOptions}
+                />
+                <Select
+                  label="Filter Bulan"
+                  value={selectedBulan}
+                  onChange={(e) => setSelectedBulan(e.target.value)}
+                  options={bulanOptions}
+                />
+                <Select
+                  label="Filter Tahun"
+                  value={selectedTahun}
+                  onChange={(e) => setSelectedTahun(e.target.value)}
+                  options={tahunOptions}
+                />
+              </div>
 
-                  <div className="relative w-full sm:w-96 mb-6">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      type="text"
-                      placeholder="Cari kode, nama barang, atau unit..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white/90"
-                    />
-                  </div>
+              <div className="relative w-full sm:w-96 mb-6">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Cari kode, nama barang, atau unit..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white/90"
+                />
+              </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                    <div className="p-4 bg-green-50 rounded-xl border border-green-100 hover:scale-105 transition-transform animate-count-up animate-delay-100">
-                      <p className="text-xs text-green-600 uppercase tracking-wide font-semibold">Total Jenis</p>
-                      <p className="text-2xl font-bold text-green-700 mt-1">{filteredStockData.length}</p>
-                    </div>
-                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 hover:scale-105 transition-transform animate-count-up animate-delay-200">
-                      <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Total ZAK</p>
-                      <p className="text-2xl font-bold text-blue-700 mt-1">{getTotalUnit("ZAK").toLocaleString()}</p>
-                    </div>
-                    <div className="p-4 bg-purple-50 rounded-xl border border-purple-100 hover:scale-105 transition-transform animate-count-up animate-delay-300">
-                      <p className="text-xs text-purple-600 uppercase tracking-wide font-semibold">Total DUS</p>
-                      <p className="text-2xl font-bold text-purple-700 mt-1">{getTotalUnit("DUS").toLocaleString()}</p>
-                    </div>
-                    <div className="p-4 bg-pink-50 rounded-xl border border-pink-100 hover:scale-105 transition-transform animate-count-up animate-delay-400">
-                      <p className="text-xs text-pink-600 uppercase tracking-wide font-semibold">Total BOTOL</p>
-                      <p className="text-2xl font-bold text-pink-700 mt-1">{getTotalUnit("BOTOL").toLocaleString()}</p>
-                    </div>
-                    <div className="p-4 bg-red-50 rounded-xl border border-red-100 hover:scale-105 transition-transform animate-count-up animate-delay-500">
-                      <p className="text-xs text-red-600 uppercase tracking-wide font-semibold">Stock Menipis</p>
-                      <p className="text-2xl font-bold text-red-700 mt-1">{filteredStockData.filter((d) => (d.unit === "ZAK" ? (d.stokAkhirUnit || 0) * (d.bobotPerUnit || 50) : d.stokAkhirKG) < 1000).length}</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                    <div className="relative w-full">
-                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                      <input
-                        type="text"
-                        placeholder="Cari kode, nama, atau jenis produk..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white/90"
-                      />
-                    </div>
-                    <select
-                      value={filterUnitHarga}
-                      onChange={(e) => setFilterUnitHarga(e.target.value)}
-                      className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white"
-                    >
-                      {unitOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div className="p-4 bg-green-50 rounded-xl border border-green-100 hover:scale-105 transition-transform animate-count-up animate-delay-100">
-                      <p className="text-xs text-green-600 uppercase tracking-wide font-semibold">Total Produk</p>
-                      <p className="text-2xl font-bold text-green-700 mt-1">{filteredHargaData.length}</p>
-                    </div>
-                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 hover:scale-105 transition-transform animate-count-up animate-delay-200">
-                      <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Unit ZAK</p>
-                      <p className="text-2xl font-bold text-blue-700 mt-1">{filteredHargaData.filter((d) => d.jenisUnit === "ZAK").length}</p>
-                    </div>
-                    <div className="p-4 bg-pink-50 rounded-xl border border-pink-100 hover:scale-105 transition-transform animate-count-up animate-delay-300">
-                      <p className="text-xs text-pink-600 uppercase tracking-wide font-semibold">Unit BOTOL</p>
-                      <p className="text-2xl font-bold text-pink-700 mt-1">{filteredHargaData.filter((d) => d.jenisUnit === "BOTOL").length}</p>
-                    </div>
-                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 hover:scale-105 transition-transform animate-count-up animate-delay-400">
-                      <p className="text-xs text-amber-600 uppercase tracking-wide font-semibold">Jenis Produk</p>
-                      <p className="text-2xl font-bold text-amber-700 mt-1">{Array.from(new Set(filteredHargaData.map((d) => d.jenisProduk).filter(Boolean))).length}</p>
-                    </div>
-                  </div>
-                </>
-              )}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                <div className="p-4 bg-green-50 rounded-xl border border-green-100 hover:scale-105 transition-transform animate-count-up animate-delay-100">
+                  <p className="text-xs text-green-600 uppercase tracking-wide font-semibold">Total Jenis</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">{filteredStockData.length}</p>
+                </div>
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 hover:scale-105 transition-transform animate-count-up animate-delay-200">
+                  <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Total ZAK</p>
+                  <p className="text-2xl font-bold text-blue-700 mt-1">{getTotalUnit("ZAK").toLocaleString()}</p>
+                </div>
+                <div className="p-4 bg-purple-50 rounded-xl border border-purple-100 hover:scale-105 transition-transform animate-count-up animate-delay-300">
+                  <p className="text-xs text-purple-600 uppercase tracking-wide font-semibold">Total DUS</p>
+                  <p className="text-2xl font-bold text-purple-700 mt-1">{getTotalUnit("DUS").toLocaleString()}</p>
+                </div>
+                <div className="p-4 bg-pink-50 rounded-xl border border-pink-100 hover:scale-105 transition-transform animate-count-up animate-delay-400">
+                  <p className="text-xs text-pink-600 uppercase tracking-wide font-semibold">Total BOTOL</p>
+                  <p className="text-2xl font-bold text-pink-700 mt-1">{getTotalUnit("BOTOL").toLocaleString()}</p>
+                </div>
+                <div className="p-4 bg-red-50 rounded-xl border border-red-100 hover:scale-105 transition-transform animate-count-up animate-delay-500">
+                  <p className="text-xs text-red-600 uppercase tracking-wide font-semibold">Stock Menipis</p>
+                  <p className="text-2xl font-bold text-red-700 mt-1">{filteredStockData.filter((d: StockGudang) => (d.unit === "ZAK" ? (d.stokAkhirUnit || 0) * (d.bobotPerUnit || 50) : d.stokAkhirKG) < 1000).length}</p>
+                </div>
+              </div>
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
                 <div className="text-sm text-gray-500">
-                  Menampilkan {activeData.length} dari {activeTab === "stock" ? stockData.length : hargaData.length} data
-                  {activeTab === "stock" && selectedFot && ` | FOT: ${selectedFot}`}
-                  {activeTab === "stock" && selectedBulan && ` | Bulan: ${bulanOptions.find((b) => b.value === selectedBulan)?.label}`}
-                  {activeTab === "stock" && selectedTahun && ` | Tahun: ${selectedTahun}`}
-                  {activeTab === "harga" && filterUnitHarga && ` | Unit: ${filterUnitHarga}`}
+                  Menampilkan {filteredStockData.length} dari {stockData.length} data
+                  {selectedFot && ` | FOT: ${selectedFot}`}
+                  {selectedBulan && ` | Bulan: ${bulanOptions.find((b) => b.value === selectedBulan)?.label}`}
+                  {selectedTahun && ` | Tahun: ${selectedTahun}`}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-gray-600">Tampilkan:</span>
@@ -849,7 +623,7 @@ export default function PublicPage() {
               </div>
 
               <div className="overflow-x-auto">
-                {isLoading ? (
+                {isLoadingStock ? (
                   <div className="flex justify-center py-12">
                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-700"></div>
                   </div>
@@ -858,58 +632,36 @@ export default function PublicPage() {
                     <svg className="w-16 h-16 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
-                    <p className="font-medium text-lg">
-                      {activeTab === "stock" ? "Belum ada data stock gudang" : "Belum ada data harga produk"}
-                    </p>
-                    <p className="text-sm mt-1">
-                      {activeTab === "stock"
-                        ? "Data akan muncul setelah admin menginput stock"
-                        : "Data akan muncul setelah admin menginput harga"}
-                    </p>
+                    <p className="font-medium text-lg">Belum ada data stock gudang</p>
+                    <p className="text-sm mt-1">Data akan muncul setelah admin menginput stock</p>
                   </div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b-2 border-gray-200">
-                        {activeTab === "stock"
-                          ? stockColumns.map((col) => (
-                              <th
-                                key={col.key}
-                                className="text-left py-3 px-2 font-bold text-gray-700 uppercase text-xs tracking-wider"
-                                style={col.width ? { width: col.width } : {}}
-                              >
-                                {col.header}
-                              </th>
-                            ))
-                          : hargaColumns.map((col) => (
-                              <th
-                                key={col.key}
-                                className="text-left py-3 px-2 font-bold text-gray-700 uppercase text-xs tracking-wider"
-                                style={col.width ? { width: col.width } : {}}
-                              >
-                                {col.header}
-                              </th>
-                            ))}
+                        {stockColumns.map((col) => (
+                          <th
+                            key={col.key}
+                            className="text-left py-3 px-2 font-bold text-gray-700 uppercase text-xs tracking-wider"
+                            style={col.width ? { width: col.width } : {}}
+                          >
+                            {col.header}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {paginatedData.map((row, index) => (
+                      {paginatedData.map((row: StockGudang, index: number) => (
                         <tr
                           key={row.id}
                           className="hover:bg-green-50/50 transition-colors animate-fade-in-up"
                           style={{ animationDelay: `${index * 0.05}s` }}
                         >
-                          {activeTab === "stock"
-                            ? stockColumns.map((col) => (
-                                <td key={col.key} className="py-3 px-2">
-                                  {col.render ? col.render(row as StockGudang) : (row as any)[col.key]}
-                                </td>
-                              ))
-                            : hargaColumns.map((col) => (
-                                <td key={col.key} className="py-3 px-2">
-                                  {col.render ? col.render(row as HargaProduk) : (row as any)[col.key]}
-                                </td>
-                              ))}
+                          {stockColumns.map((col) => (
+                            <td key={col.key} className="py-3 px-2">
+                              {col.render ? col.render(row as StockGudang) : (row as any)[col.key]}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
@@ -920,7 +672,7 @@ export default function PublicPage() {
               {totalPages > 1 && (
                 <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 pt-5 animate-fade-in-up">
                   <div className="text-sm text-gray-500">
-                    Menampilkan {startIndex + 1} - {Math.min(endIndex, activeData.length)} dari {activeData.length} item
+                    Menampilkan {startIndex + 1} - {Math.min(endIndex, filteredStockData.length)} dari {filteredStockData.length} item
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -942,7 +694,7 @@ export default function PublicPage() {
                     </button>
 
                     <div className="flex items-center gap-1">
-                      {pageNumbers.map((page) => (
+                      {pageNumbers.map((page: number) => (
                         <button
                           key={page}
                           onClick={() => setCurrentPage(page)}
@@ -981,7 +733,7 @@ export default function PublicPage() {
 
           <footer className="text-center py-8 border-t border-green-200/60 animate-fade-in-up animate-delay-300">
             <p className="text-sm text-gray-500">
-              PT Bukit Agrochemical | Sistem Administrasi Distributor Pupuk
+              PT Bukit Agrochemical Baru | Sistem Administrasi Distributor Pupuk
             </p>
             <p className="text-xs text-gray-400 mt-1">
               Untuk mengelola data, silakan login sebagai admin
