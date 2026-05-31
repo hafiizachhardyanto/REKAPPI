@@ -130,8 +130,6 @@ export default function SuratPengangkutanPage() {
     tanggal: new Date().toISOString().split("T")[0],
     namaKabupaten: "Lamandau",
     nomorPI: "",
-    nomorSubDO: "",
-    nomorPO: "",
     jenisPupuk: "",
     party: "",
     pengambilanZAK: "",
@@ -522,8 +520,6 @@ export default function SuratPengangkutanPage() {
     }
 
     if (subJenisDO === "mandiri") {
-      if (!formData.nomorSubDO.trim()) newErrors.nomorSubDO = "Nomor Sub DO wajib diisi";
-      if (!formData.nomorPO.trim()) newErrors.nomorPO = "Nomor PO wajib diisi";
       if (!formData.party.trim()) newErrors.party = "Party wajib diisi";
       if (!formData.kepadaNama.trim()) newErrors.kepadaNama = "Nama penerima wajib diisi";
       if (!formData.kepadaPerusahaan.trim()) newErrors.kepadaPerusahaan = "Nama perusahaan wajib diisi";
@@ -532,7 +528,11 @@ export default function SuratPengangkutanPage() {
 
     items.forEach((item, idx) => {
       if (!item.jenisPupuk.trim()) newErrors[`jenisPupuk_${idx}`] = "Jenis pupuk wajib diisi";
-      if (subJenisDO === "mandiri" && !item.party.trim()) newErrors[`party_${idx}`] = "Party wajib diisi";
+      if (subJenisDO === "mandiri") {
+        if (!item.nomorSubDO.trim()) newErrors[`nomorSubDO_${idx}`] = "Nomor Sub DO wajib diisi";
+        if (!item.nomorPO.trim()) newErrors[`nomorPO_${idx}`] = "Nomor PO wajib diisi";
+        if (!item.party.trim()) newErrors[`party_${idx}`] = "Party wajib diisi";
+      }
       if (!item.pengambilanZAK.trim()) {
         newErrors[`pengambilan_${idx}`] = "Pengambilan wajib diisi";
       } else {
@@ -682,8 +682,6 @@ export default function SuratPengangkutanPage() {
       tanggal: new Date().toISOString().split("T")[0],
       namaKabupaten: "Lamandau",
       nomorPI: "",
-      nomorSubDO: "",
-      nomorPO: "",
       jenisPupuk: "",
       party: "",
       pengambilanZAK: "",
