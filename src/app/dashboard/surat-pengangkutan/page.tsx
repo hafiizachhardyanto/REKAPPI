@@ -97,12 +97,12 @@ const parseNomorSeri = (nomorSeri: string) => {
   const year = parseInt(parts[1]);
   const roman = parts[2];
   const urut = parseInt(parts[3]);
-  if (prefix !== "BAGB-SP" || isNaN(year) || isNaN(urut)) return null;
+  if ((prefix !== "BAGB-SP" && prefix !== "BAGB-SP-DO") || isNaN(year) || isNaN(urut)) return null;
   return { prefix, year, roman, urut };
 };
 
 const validateNomorSeriFormat = (value: string) => {
-  const regex = /^BAGB-SP\/\d{4}\/(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\/\d{4}$/;
+  const regex = /^(BAGB-SP|BAGB-SP-DO)\/\d{4}\/(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\/\d{4}$/;
   return regex.test(value.trim());
 };
 
@@ -130,10 +130,6 @@ export default function SuratPengangkutanPage() {
     tanggal: new Date().toISOString().split("T")[0],
     namaKabupaten: "Lamandau",
     nomorPI: "",
-    jenisPupuk: "",
-    party: "",
-    pengambilanZAK: "",
-    sisa: "",
     nomorPolisi: "",
     driverUnit: "",
     nomorSIM: "",
@@ -171,6 +167,25 @@ export default function SuratPengangkutanPage() {
     }
   }, [urlNomorPI, piList, jenisSurat]);
 
+  useEffect(() => {
+    if (subJenisDO === "mandiri" && items.length === 0) {
+      setItems([
+        {
+          id: 1,
+          nomorSubDO: "",
+          nomorPO: "",
+          jenisPupuk: "",
+          party: "",
+          pengambilanZAK: "",
+          sisa: "",
+          bobotPerUnit: 50,
+          maxZAK: 0,
+          fot: "",
+        },
+      ]);
+    }
+  }, [subJenisDO]);
+
   const handleClickOutside = (e: MouseEvent) => {
     if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
       setShowPISearch(false);
@@ -195,11 +210,12 @@ export default function SuratPengangkutanPage() {
     const now = new Date();
     const year = now.getFullYear();
     const roman = getRomanMonth(now.getMonth() + 1);
-    const prefix = `BAGB-SP/${year}/${roman}`;
+    const prefixBase = subJenisDO === "mandiri" ? "BAGB-SP-DO" : "BAGB-SP";
+    const prefix = `${prefixBase}/${year}/${roman}`;
     let maxUrut = 0;
     existingSuratList.forEach((s) => {
       const parsed = parseNomorSeri(s.nomorSeri);
-      if (parsed && parsed.year === year && parsed.roman === roman) {
+      if (parsed && parsed.year === year && parsed.roman === roman && parsed.prefix === prefixBase) {
         if (parsed.urut > maxUrut) maxUrut = parsed.urut;
       }
     });
@@ -213,7 +229,7 @@ export default function SuratPengangkutanPage() {
       return false;
     }
     if (!validateNomorSeriFormat(value)) {
-      setNomorSeriError("Format nomor seri tidak valid. Gunakan format: BAGB-SP/2026/V/0001");
+      setNomorSeriError("Format nomor seri tidak valid. Gunakan format: BAGB-SP/2026/V/0001 atau BAGB-SP-DO/2026/V/0001");
       return true;
     }
     const exists = existingSuratList.some((s) => s.nomorSeri.trim().toUpperCase() === value.trim().toUpperCase());
@@ -520,10 +536,13 @@ export default function SuratPengangkutanPage() {
     }
 
     if (subJenisDO === "mandiri") {
-      if (!formData.party.trim()) newErrors.party = "Party wajib diisi";
       if (!formData.kepadaNama.trim()) newErrors.kepadaNama = "Nama penerima wajib diisi";
       if (!formData.kepadaPerusahaan.trim()) newErrors.kepadaPerusahaan = "Nama perusahaan wajib diisi";
       if (!formData.kepadaAlamat.trim()) newErrors.kepadaAlamat = "Alamat wajib diisi";
+    }
+
+    if (items.length === 0) {
+      newErrors.items = "Minimal harus ada 1 item pengangkutan";
     }
 
     items.forEach((item, idx) => {
@@ -682,10 +701,6 @@ export default function SuratPengangkutanPage() {
       tanggal: new Date().toISOString().split("T")[0],
       namaKabupaten: "Lamandau",
       nomorPI: "",
-      jenisPupuk: "",
-      party: "",
-      pengambilanZAK: "",
-      sisa: "",
       nomorPolisi: "",
       driverUnit: "",
       nomorSIM: "",
@@ -1207,6 +1222,9 @@ export default function SuratPengangkutanPage() {
 
         <Card title="Dasar Pengangkutan">
           <div className="space-y-4">
+            {errors.items && (
+              <p className="text-sm text-red-600">{errors.items}</p>
+            )}
             {items.map((item, idx) => (
               <div key={item.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
                 <div className="flex items-center justify-between mb-3">
