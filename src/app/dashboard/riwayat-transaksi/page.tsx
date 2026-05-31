@@ -77,6 +77,32 @@ interface ProformaInvoiceItem {
   statusPengangkutan?: string;
 }
 
+interface ExistingSurat {
+  id: string;
+  nomorSeri: string;
+}
+
+const getRomanMonth = (month: number) => {
+  const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+  return romans[month - 1] || "I";
+};
+
+const parseNomorSeri = (nomorSeri: string) => {
+  const parts = nomorSeri.split("/");
+  if (parts.length !== 4) return null;
+  const prefix = parts[0];
+  const year = parseInt(parts[1]);
+  const roman = parts[2];
+  const urut = parseInt(parts[3]);
+  if (prefix !== "BAGB-SP" || isNaN(year) || isNaN(urut)) return null;
+  return { prefix, year, roman, urut };
+};
+
+const validateNomorSeriFormat = (value: string) => {
+  const regex = /^BAGB-SP\/\d{4}\/(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\/\d{4}$/;
+  return regex.test(value.trim());
+};
+
 export default function RiwayatTransaksiPage() {
   const { user } = useAuth();
   const [data, setData] = useState<UnifiedTransaksi[]>([]);
@@ -93,6 +119,8 @@ export default function RiwayatTransaksiPage() {
   const [fotList, setFotList] = useState<string[]>([]);
   const [stockList, setStockList] = useState<StockItem[]>([]);
   const [piList, setPiList] = useState<ProformaInvoiceItem[]>([]);
+  const [existingSuratList, setExistingSuratList] = useState<ExistingSurat[]>([]);
+  const [nomorSeriError, setNomorSeriError] = useState("");
 
   const [editForm, setEditForm] = useState({
     tanggal: "",
@@ -132,6 +160,7 @@ export default function RiwayatTransaksiPage() {
     fetchData();
     fetchStockGudang();
     fetchProformaInvoice();
+    fetchExistingSurat();
   }, []);
 
   const fetchData = async () => {
@@ -241,6 +270,41 @@ export default function RiwayatTransaksiPage() {
     }
   };
 
+  const fetchExistingSurat = async () => {
+    try {
+      const q = query(collection(db, "suratPengangkutan"), orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        nomorSeri: doc.data().nomorSeri || "",
+      } as ExistingSurat));
+      setExistingSuratList(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const checkNomorSeriExists = (value: string, excludeNomorSeri?: string) => {
+    if (!value.trim()) {
+      setNomorSeriError("");
+      return false;
+    }
+    if (!validateNomorSeriFormat(value)) {
+      setNomorSeriError("Format nomor seri tidak valid. Gunakan format: BAGB-SP/2026/V/0001");
+      return true;
+    }
+    const exists = existingSuratList.some((s) =>
+      s.nomorSeri.trim().toUpperCase() === value.trim().toUpperCase() &&
+      s.nomorSeri.trim().toUpperCase() !== (excludeNomorSeri || "").trim().toUpperCase()
+    );
+    if (exists) {
+      setNomorSeriError("Nomor seri sudah ada dalam database. Silakan gunakan nomor seri lain.");
+      return true;
+    }
+    setNomorSeriError("");
+    return false;
+  };
+
   const getStockForProduct = (namaProduk: string) => {
     return stockList.find((s) =>
       s.namaBarang.toUpperCase().includes(namaProduk.toUpperCase()) ||
@@ -283,6 +347,7 @@ export default function RiwayatTransaksiPage() {
 
   const handleEdit = (item: UnifiedTransaksi) => {
     setSelectedItem(item);
+    setNomorSeriError("");
     if (item.jenis === "suratPengangkutanGudangInduk" || item.jenis === "suratPengangkutanDO") {
       setEditSuratForm({
         tanggal: item.tanggal,
@@ -376,6 +441,11 @@ export default function RiwayatTransaksiPage() {
   };
 
   const handleUpdateSuratPengangkutan = async () => {
+    const newNomorSeri = editSuratForm.nomorSeri.trim();
+    if (checkNomorSeriExists(newNomorSeri, selectedItem!.nomorSeri)) {
+      throw new Error("Nomor seri sudah ada");
+    }
+
     const oldItems = selectedItem!.items || [];
     const newItems = editSuratForm.items.map((it) => ({
       nomorSubDO: it.nomorSubDO,
@@ -391,7 +461,7 @@ export default function RiwayatTransaksiPage() {
     const totalPengambilanKG = newItems.reduce((sum, it) => sum + it.totalKG, 0);
     const updateData: any = {
       tanggal: editSuratForm.tanggal,
-      nomorSeri: editSuratForm.nomorSeri.trim(),
+      nomorSeri: newNomorSeri,
       nomorPolisi: editSuratForm.nomorPolisi.trim(),
       driverUnit: editSuratForm.driverUnit.trim(),
       nomorSIM: editSuratForm.nomorSIM.trim() || null,
@@ -404,7 +474,10 @@ export default function RiwayatTransaksiPage() {
     if (!suratSnapshot.empty) {
       await updateDoc(doc(db, "suratPengangkutan", suratSnapshot.docs[0].id), updateData);
     }
-    await updateDoc(doc(db, "transaksiBarangKeluar", selectedItem!.id), updateData);
+    await updateDoc(doc(db, "transaksiBarangKeluar", selectedItem!.id), {
+      ...updateData,
+      nomorSeri: newNomorSeri,
+    });
 
     if (selectedItem!.jenis === "suratPengangkutanGudangInduk" && selectedItem!.nomorPI) {
       const pi = getPIByNomor(selectedItem!.nomorPI);
@@ -467,6 +540,7 @@ export default function RiwayatTransaksiPage() {
         }
       }
     }
+    fetchExistingSurat();
   };
 
   const handleDelete = async (item: UnifiedTransaksi) => {
@@ -539,6 +613,7 @@ export default function RiwayatTransaksiPage() {
       }
       await deleteDoc(doc(db, collectionName, item.id));
       fetchData();
+      fetchExistingSurat();
     } catch (error) {
       console.error(error);
     }
@@ -946,6 +1021,12 @@ export default function RiwayatTransaksiPage() {
     }));
   };
 
+  const handleNomorSeriChangeEdit = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEditSuratForm((prev) => ({ ...prev, nomorSeri: value }));
+    checkNomorSeriExists(value, selectedItem?.nomorSeri);
+  };
+
   return (
     <div className="space-y-6">
       <Header title="Riwayat Transaksi" subtitle="Lihat dan kelola riwayat transaksi barang masuk, keluar, dan surat pengangkutan" />
@@ -1158,14 +1239,30 @@ export default function RiwayatTransaksiPage() {
       <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={isSuratEdit ? "Edit Surat Pengangkutan" : `Edit ${selectedItem?.jenis === "barangMasuk" ? "Transaksi Barang Masuk" : "Transaksi Barang Keluar"}`} size="lg" footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Batal</Button>
-          <Button variant="primary" onClick={handleUpdate} isLoading={isSubmitting}>Simpan Perubahan</Button>
+          <Button variant="primary" onClick={handleUpdate} isLoading={isSubmitting} disabled={isSuratEdit && !!nomorSeriError}>Simpan Perubahan</Button>
         </div>
       }>
         {isSuratEdit ? (
           <form onSubmit={handleUpdate} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Input label="Tanggal" type="date" value={editSuratForm.tanggal} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, tanggal: e.target.value }))} required />
-              <Input label="Nomor Seri" type="text" value={editSuratForm.nomorSeri} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorSeri: e.target.value }))} required />
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nomor Seri</label>
+                <input
+                  type="text"
+                  value={editSuratForm.nomorSeri}
+                  onChange={handleNomorSeriChangeEdit}
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all font-mono text-sm ${nomorSeriError ? "border-red-500 bg-red-50" : "border-gray-300"}`}
+                />
+                {nomorSeriError && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {nomorSeriError}
+                  </p>
+                )}
+              </div>
               <Input label="Nomor Polisi" type="text" value={editSuratForm.nomorPolisi} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorPolisi: e.target.value }))} required />
               <Input label="Driver Unit" type="text" value={editSuratForm.driverUnit} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, driverUnit: e.target.value }))} required />
               <Input label="Nomor SIM" type="text" value={editSuratForm.nomorSIM} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorSIM: e.target.value }))} className="md:col-span-2" />

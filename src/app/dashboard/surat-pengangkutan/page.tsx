@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   collection,
   addDoc,
@@ -83,8 +84,33 @@ interface PILoadInfo {
   }>;
 }
 
+const getRomanMonth = (month: number) => {
+  const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+  return romans[month - 1] || "I";
+};
+
+const parseNomorSeri = (nomorSeri: string) => {
+  const parts = nomorSeri.split("/");
+  if (parts.length !== 4) return null;
+  const prefix = parts[0];
+  const year = parseInt(parts[1]);
+  const roman = parts[2];
+  const urut = parseInt(parts[3]);
+  if (prefix !== "BAGB-SP" || isNaN(year) || isNaN(urut)) return null;
+  return { prefix, year, roman, urut };
+};
+
+const validateNomorSeriFormat = (value: string) => {
+  const regex = /^BAGB-SP\/\d{4}\/(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\/\d{4}$/;
+  return regex.test(value.trim());
+};
+
 export default function SuratPengangkutanPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlNomorPI = searchParams.get("nomorPI");
+
   const [piList, setPiList] = useState<ProformaInvoice[]>([]);
   const [stockList, setStockList] = useState<StockItem[]>([]);
   const [existingSuratList, setExistingSuratList] = useState<ExistingSurat[]>([]);
@@ -135,6 +161,15 @@ export default function SuratPengangkutanPage() {
     }
   }, [selectedPI, stockList, jenisSurat]);
 
+  useEffect(() => {
+    if (urlNomorPI && piList.length > 0 && jenisSurat === "gudangInduk") {
+      const pi = piList.find((p) => p.nomorPI === urlNomorPI);
+      if (pi) {
+        handlePISelect(pi);
+      }
+    }
+  }, [urlNomorPI, piList, jenisSurat]);
+
   const handleClickOutside = (e: MouseEvent) => {
     if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
       setShowPISearch(false);
@@ -155,10 +190,30 @@ export default function SuratPengangkutanPage() {
     }
   };
 
+  const getNextNomorSeri = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const roman = getRomanMonth(now.getMonth() + 1);
+    const prefix = `BAGB-SP/${year}/${roman}`;
+    let maxUrut = 0;
+    existingSuratList.forEach((s) => {
+      const parsed = parseNomorSeri(s.nomorSeri);
+      if (parsed && parsed.year === year && parsed.roman === roman) {
+        if (parsed.urut > maxUrut) maxUrut = parsed.urut;
+      }
+    });
+    const nextUrut = maxUrut + 1;
+    return `${prefix}/${String(nextUrut).padStart(4, "0")}`;
+  };
+
   const checkNomorSeriExists = (value: string) => {
     if (!value.trim()) {
       setNomorSeriError("");
       return false;
+    }
+    if (!validateNomorSeriFormat(value)) {
+      setNomorSeriError("Format nomor seri tidak valid. Gunakan format: BAGB-SP/2026/V/0001");
+      return true;
     }
     const exists = existingSuratList.some((s) => s.nomorSeri.trim().toUpperCase() === value.trim().toUpperCase());
     if (exists) {
@@ -176,12 +231,7 @@ export default function SuratPengangkutanPage() {
   };
 
   const generateNomorSeri = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    const random = Math.floor(1000 + Math.random() * 9000);
-    const generated = `BAGB-SP/${year}/${month}/${day}.${random}`;
+    const generated = getNextNomorSeri();
     setNomorSeri(generated);
     checkNomorSeriExists(generated);
   };
@@ -599,6 +649,9 @@ export default function SuratPengangkutanPage() {
     setSearchPI("");
     setErrors({});
     setNomorSeriError("");
+    if (urlNomorPI) {
+      router.replace("/dashboard/surat-pengangkutan");
+    }
   };
 
   const handlePrintPDF = () => {
@@ -903,9 +956,9 @@ export default function SuratPengangkutanPage() {
         </Card>
 
         {jenisSurat === "gudangInduk" && (
-          <Card title="Proforma Invoice">
+          <Card title="Proforma Invoice" className="overflow-visible">
             <div className="space-y-4">
-              <div ref={searchRef} className="relative z-50">
+              <div ref={searchRef} className="relative z-50 overflow-visible">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Cari Nomor Proforma Invoice
                 </label>
