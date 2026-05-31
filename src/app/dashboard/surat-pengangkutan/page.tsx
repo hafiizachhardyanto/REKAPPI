@@ -159,7 +159,7 @@ export default function SuratPengangkutanPage() {
   }, []);
 
   useEffect(() => {
-    if ((jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri")) && selectedPI) {
+    if (selectedPI && (jenisSurat === "gudangInduk" || subJenisDO === "mandiri" || subJenisDO === "dikuasakan")) {
       calculatePILoadInfo();
     }
   }, [selectedPI, stockList, jenisSurat, subJenisDO]);
@@ -435,7 +435,7 @@ export default function SuratPengangkutanPage() {
       const searchLower = searchPI.toLowerCase();
       const matchSearch = pi.nomorPI.toLowerCase().includes(searchLower) || pi.namaCustomer.toLowerCase().includes(searchLower);
       if (!matchSearch) return false;
-      if (jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri")) {
+      if (jenisSurat === "gudangInduk" || subJenisDO === "mandiri") {
         const totalOrdered = pi.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
         const totalLoaded = piLoadInfo && piLoadInfo.nomorPI === pi.nomorPI ? piLoadInfo.totalLoadedKG : 0;
         return totalLoaded < totalOrdered;
@@ -506,26 +506,22 @@ export default function SuratPengangkutanPage() {
     const newErrors: Record<string, string> = {};
     if (!formData.tanggal) newErrors.tanggal = "Tanggal wajib diisi";
     if (!formData.namaKabupaten.trim()) newErrors.namaKabupaten = "Nama kabupaten wajib diisi";
-    if (!formData.driverUnit.trim()) newErrors.driverUnit = "Driver unit wajib diisi";
-    if (!formData.nomorPolisi.trim()) newErrors.nomorPolisi = "Nomor polisi wajib diisi";
 
-    const isFullForm = jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri");
-    const isDikuasakan = jenisSurat === "do" && subJenisDO === "dikuasakan";
+    const isFullForm = jenisSurat === "gudangInduk" || subJenisDO === "mandiri";
+    const isDikuasakan = subJenisDO === "dikuasakan";
 
     if (isFullForm) {
+      if (!formData.driverUnit.trim()) newErrors.driverUnit = "Driver unit wajib diisi";
+      if (!formData.nomorPolisi.trim()) newErrors.nomorPolisi = "Nomor polisi wajib diisi";
       if (!nomorSeri.trim()) newErrors.nomorSeri = "Nomor seri wajib diisi";
       if (nomorSeriError) newErrors.nomorSeri = nomorSeriError;
     }
 
-    if (jenisSurat === "gudangInduk") {
+    if (jenisSurat === "gudangInduk" || isDikuasakan) {
       if (!selectedPI) newErrors.nomorPI = "Nomor PI wajib dipilih";
     }
 
-    if (isDikuasakan) {
-      if (!selectedPI) newErrors.nomorPI = "Nomor PI wajib dipilih";
-    }
-
-    if (jenisSurat === "do" && subJenisDO === "mandiri") {
+    if (subJenisDO === "mandiri") {
       if (!formData.nomorSubDO.trim()) newErrors.nomorSubDO = "Nomor Sub DO wajib diisi";
       if (!formData.nomorPO.trim()) newErrors.nomorPO = "Nomor PO wajib diisi";
       if (!formData.party.trim()) newErrors.party = "Party wajib diisi";
@@ -534,21 +530,19 @@ export default function SuratPengangkutanPage() {
       if (!formData.kepadaAlamat.trim()) newErrors.kepadaAlamat = "Alamat wajib diisi";
     }
 
-    if (isFullForm) {
-      items.forEach((item, idx) => {
-        if (!item.jenisPupuk.trim()) newErrors[`jenisPupuk_${idx}`] = "Jenis pupuk wajib diisi";
-        if (jenisSurat === "do" && subJenisDO === "mandiri" && !item.party.trim()) newErrors[`party_${idx}`] = "Party wajib diisi";
-        if (!item.pengambilanZAK.trim()) {
-          newErrors[`pengambilan_${idx}`] = "Pengambilan wajib diisi";
-        } else {
-          const zak = parseFloat(item.pengambilanZAK) || 0;
-          if (zak <= 0) newErrors[`pengambilan_${idx}`] = "Pengambilan harus lebih dari 0";
-          if (jenisSurat === "gudangInduk" && zak > item.maxZAK && item.maxZAK > 0) {
-            newErrors[`pengambilan_${idx}`] = `Maksimal ${item.maxZAK} ZAK (${item.maxZAK * item.bobotPerUnit} KG)`;
-          }
+    items.forEach((item, idx) => {
+      if (!item.jenisPupuk.trim()) newErrors[`jenisPupuk_${idx}`] = "Jenis pupuk wajib diisi";
+      if (subJenisDO === "mandiri" && !item.party.trim()) newErrors[`party_${idx}`] = "Party wajib diisi";
+      if (!item.pengambilanZAK.trim()) {
+        newErrors[`pengambilan_${idx}`] = "Pengambilan wajib diisi";
+      } else {
+        const zak = parseFloat(item.pengambilanZAK) || 0;
+        if (zak <= 0) newErrors[`pengambilan_${idx}`] = "Pengambilan harus lebih dari 0";
+        if (jenisSurat === "gudangInduk" && zak > item.maxZAK && item.maxZAK > 0) {
+          newErrors[`pengambilan_${idx}`] = `Maksimal ${item.maxZAK} ZAK (${item.maxZAK * item.bobotPerUnit} KG)`;
         }
-      });
-    }
+      }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -560,33 +554,20 @@ export default function SuratPengangkutanPage() {
     setIsSubmitting(true);
     setSuccessMessage("");
     try {
-      const isFullForm = jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri");
-      const isDikuasakan = jenisSurat === "do" && subJenisDO === "dikuasakan";
+      const isFullForm = jenisSurat === "gudangInduk" || subJenisDO === "mandiri";
+      const isDikuasakan = subJenisDO === "dikuasakan";
 
-      let totalPengambilanKG = 0;
-      if (isFullForm) {
-        totalPengambilanKG = items.reduce((sum, item) => {
-          const zak = parseFloat(item.pengambilanZAK) || 0;
-          return sum + zak * item.bobotPerUnit;
-        }, 0);
-      }
+      const totalPengambilanKG = items.reduce((sum, item) => {
+        const zak = parseFloat(item.pengambilanZAK) || 0;
+        return sum + zak * item.bobotPerUnit;
+      }, 0);
 
       const suratData: any = {
         jenisSurat,
         subJenisDO: subJenisDO || null,
         tanggal: formData.tanggal,
         namaKabupaten: formData.namaKabupaten,
-        nomorPolisi: formData.nomorPolisi.trim(),
-        driverUnit: formData.driverUnit.trim(),
-        nomorSIM: formData.nomorSIM.trim() || null,
-        createdBy: user?.nama || "",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      if (isFullForm) {
-        suratData.nomorSeri = nomorSeri.trim();
-        suratData.items = items.map((item) => ({
+        items: items.map((item) => ({
           nomorSubDO: item.nomorSubDO,
           nomorPO: item.nomorPO,
           jenisPupuk: item.jenisPupuk,
@@ -596,8 +577,18 @@ export default function SuratPengangkutanPage() {
           totalKG: (parseFloat(item.pengambilanZAK) || 0) * item.bobotPerUnit,
           sisa: item.sisa,
           fot: item.fot,
-        }));
-        suratData.totalPengambilanKG = totalPengambilanKG;
+        })),
+        totalPengambilanKG: totalPengambilanKG,
+        createdBy: user?.nama || "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (isFullForm) {
+        suratData.nomorSeri = nomorSeri.trim();
+        suratData.nomorPolisi = formData.nomorPolisi.trim();
+        suratData.driverUnit = formData.driverUnit.trim();
+        suratData.nomorSIM = formData.nomorSIM.trim() || null;
       }
 
       if (jenisSurat === "gudangInduk" && selectedPI) {
@@ -635,7 +626,7 @@ export default function SuratPengangkutanPage() {
         }
       }
 
-      if (jenisSurat === "do" && subJenisDO === "mandiri") {
+      if (subJenisDO === "mandiri") {
         suratData.kepadaNama = formData.kepadaNama.trim();
         suratData.kepadaPerusahaan = formData.kepadaPerusahaan.trim();
         suratData.kepadaAlamat = formData.kepadaAlamat.trim();
@@ -646,8 +637,6 @@ export default function SuratPengangkutanPage() {
         suratData.kepadaNama = selectedPI.namaCustomer || "";
         suratData.kepadaPerusahaan = selectedPI.namaCustomer || "";
         suratData.kepadaAlamat = selectedPI.alamatCustomer || "";
-        suratData.items = [];
-        suratData.totalPengambilanKG = 0;
       }
 
       await addDoc(collection(db, "suratPengangkutan"), suratData);
@@ -655,15 +644,18 @@ export default function SuratPengangkutanPage() {
       const transaksiData: any = {
         tanggal: formData.tanggal,
         jenis: jenisSurat === "gudangInduk" ? "suratPengangkutanGudangInduk" : "suratPengangkutanDO",
-        nomorSeri: isFullForm ? nomorSeri.trim() : null,
-        items: suratData.items || [],
-        totalPengambilanKG: suratData.totalPengambilanKG || 0,
-        nomorPolisi: formData.nomorPolisi,
-        driverUnit: formData.driverUnit,
-        nomorSIM: formData.nomorSIM || null,
+        items: suratData.items,
+        totalPengambilanKG: totalPengambilanKG,
         createdBy: user?.nama || "",
         createdAt: serverTimestamp(),
       };
+
+      if (isFullForm) {
+        transaksiData.nomorSeri = nomorSeri.trim();
+        transaksiData.nomorPolisi = formData.nomorPolisi;
+        transaksiData.driverUnit = formData.driverUnit;
+        transaksiData.nomorSIM = formData.nomorSIM || null;
+      }
 
       if (selectedPI) {
         transaksiData.nomorPI = selectedPI.nomorPI;
@@ -956,7 +948,7 @@ export default function SuratPengangkutanPage() {
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">DO Mandiri</h3>
-                  <p className="text-sm text-gray-500">Sistem lengkap dengan nomor seri, dasar pengangkutan, dan proforma invoice</p>
+                  <p className="text-sm text-gray-500">Sistem lengkap dengan nomor seri, dasar pengangkutan, proforma invoice, dan data unit angkutan</p>
                 </div>
               </div>
             </button>
@@ -972,7 +964,7 @@ export default function SuratPengangkutanPage() {
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">DO Dikuasakan</h3>
-                  <p className="text-sm text-gray-500">Form sederhana tanpa nomor seri dan dasar pengangkutan. Penerima otomatis dari data PI.</p>
+                  <p className="text-sm text-gray-500">Tanpa nomor seri dan data unit angkutan. Dasar pengangkutan otomatis dari PI. Penerima otomatis dari data PI.</p>
                 </div>
               </div>
             </button>
@@ -988,8 +980,8 @@ export default function SuratPengangkutanPage() {
     );
   }
 
-  const isFullForm = jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri");
-  const isDikuasakan = jenisSurat === "do" && subJenisDO === "dikuasakan";
+  const isFullForm = jenisSurat === "gudangInduk" || subJenisDO === "mandiri";
+  const isDikuasakan = subJenisDO === "dikuasakan";
   const pageTitle = jenisSurat === "gudangInduk" ? "Gudang Induk" : subJenisDO === "mandiri" ? "DO Mandiri" : "DO Dikuasakan";
 
   return (
@@ -1079,135 +1071,133 @@ export default function SuratPengangkutanPage() {
           </div>
         </Card>
 
-        {(jenisSurat === "gudangInduk" || isDikuasakan) && (
-          <Card title={isDikuasakan ? "Pilih Proforma Invoice" : "Proforma Invoice"} className="overflow-visible">
-            <div className="space-y-4">
-              <div ref={searchRef} className="relative z-50 overflow-visible">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cari Nomor Proforma Invoice
-                </label>
-                <input
-                  type="text"
-                  value={searchPI}
-                  onChange={(e) => {
-                    setSearchPI(e.target.value);
-                    setShowPISearch(true);
-                    if (!e.target.value) {
-                      setSelectedPI(null);
-                      setPiLoadInfo(null);
-                      setItems([]);
-                      if (isDikuasakan) {
-                        setFormData((prev) => ({
-                          ...prev,
-                          nomorPI: "",
-                          kepadaNama: "",
-                          kepadaPerusahaan: "",
-                          kepadaAlamat: "",
-                        }));
-                      }
+        <Card title={isDikuasakan ? "Pilih Proforma Invoice" : "Proforma Invoice"} className="overflow-visible">
+          <div className="space-y-4">
+            <div ref={searchRef} className="relative z-50 overflow-visible">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Cari Nomor Proforma Invoice
+              </label>
+              <input
+                type="text"
+                value={searchPI}
+                onChange={(e) => {
+                  setSearchPI(e.target.value);
+                  setShowPISearch(true);
+                  if (!e.target.value) {
+                    setSelectedPI(null);
+                    setPiLoadInfo(null);
+                    setItems([]);
+                    if (isDikuasakan) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        nomorPI: "",
+                        kepadaNama: "",
+                        kepadaPerusahaan: "",
+                        kepadaAlamat: "",
+                      }));
                     }
-                  }}
-                  onFocus={() => setShowPISearch(true)}
-                  placeholder="Ketik nomor PI atau nama customer..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white"
-                />
-                {showPISearch && (
-                  <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-[400px] overflow-y-auto z-[9999]" onMouseDown={(e) => e.preventDefault()}>
-                    {searchPI && filteredPIList.length === 0 ? (
-                      <div className="p-4 text-sm text-gray-500">Tidak ada PI yang tersedia atau tidak cocok</div>
-                    ) : !searchPI ? (
-                      <div className="p-3 text-xs text-gray-400">Ketik minimal 1 karakter untuk mencari PI</div>
-                    ) : (
-                      filteredPIList.map((pi) => {
-                        const totalOrdered = pi.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
-                        const totalLoaded = piLoadInfo && piLoadInfo.nomorPI === pi.nomorPI ? piLoadInfo.totalLoadedKG : 0;
-                        const sisa = Math.max(0, totalOrdered - totalLoaded);
-                        return (
-                          <button
-                            key={pi.id}
-                            type="button"
-                            onClick={() => handlePISelect(pi)}
-                            className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors border-b border-gray-100 last:border-0 block"
-                          >
-                            <p className="font-semibold text-gray-800">{pi.nomorPI}</p>
-                            <p className="text-sm text-gray-500">{pi.namaCustomer} | {pi.tanggal}</p>
-                            {!isDikuasakan && (
-                              <p className="text-xs text-green-600 mt-1">Total: {totalOrdered.toLocaleString()} KG | Sisa: {sisa.toLocaleString()} KG</p>
-                            )}
-                          </button>
-                        );
-                      })
-                    )}
+                  }
+                }}
+                onFocus={() => setShowPISearch(true)}
+                placeholder="Ketik nomor PI atau nama customer..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white"
+              />
+              {showPISearch && (
+                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-[400px] overflow-y-auto z-[9999]" onMouseDown={(e) => e.preventDefault()}>
+                  {searchPI && filteredPIList.length === 0 ? (
+                    <div className="p-4 text-sm text-gray-500">Tidak ada PI yang tersedia atau tidak cocok</div>
+                  ) : !searchPI ? (
+                    <div className="p-3 text-xs text-gray-400">Ketik minimal 1 karakter untuk mencari PI</div>
+                  ) : (
+                    filteredPIList.map((pi) => {
+                      const totalOrdered = pi.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
+                      const totalLoaded = piLoadInfo && piLoadInfo.nomorPI === pi.nomorPI ? piLoadInfo.totalLoadedKG : 0;
+                      const sisa = Math.max(0, totalOrdered - totalLoaded);
+                      return (
+                        <button
+                          key={pi.id}
+                          type="button"
+                          onClick={() => handlePISelect(pi)}
+                          className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors border-b border-gray-100 last:border-0 block"
+                        >
+                          <p className="font-semibold text-gray-800">{pi.nomorPI}</p>
+                          <p className="text-sm text-gray-500">{pi.namaCustomer} | {pi.tanggal}</p>
+                          {isFullForm && (
+                            <p className="text-xs text-green-600 mt-1">Total: {totalOrdered.toLocaleString()} KG | Sisa: {sisa.toLocaleString()} KG</p>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+              {errors.nomorPI && <p className="mt-1 text-sm text-red-600">{errors.nomorPI}</p>}
+            </div>
+
+            {isDikuasakan && selectedPI && (
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold mb-2">Data Penerima dari PI</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Nama</p>
+                    <p className="text-sm font-semibold text-gray-800">{selectedPI.namaCustomer}</p>
                   </div>
-                )}
-                {errors.nomorPI && <p className="mt-1 text-sm text-red-600">{errors.nomorPI}</p>}
+                  <div>
+                    <p className="text-xs text-gray-500">Perusahaan</p>
+                    <p className="text-sm font-semibold text-gray-800">{selectedPI.namaCustomer}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Alamat</p>
+                    <p className="text-sm font-semibold text-gray-800">{selectedPI.alamatCustomer || "-"}</p>
+                  </div>
+                </div>
               </div>
+            )}
 
-              {isDikuasakan && selectedPI && (
+            {isFullForm && piLoadInfo && (
+              <div className="grid grid-cols-3 gap-4">
                 <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                  <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold mb-2">Data Penerima dari PI</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-xs text-gray-500">Nama</p>
-                      <p className="text-sm font-semibold text-gray-800">{selectedPI.namaCustomer}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Perusahaan</p>
-                      <p className="text-sm font-semibold text-gray-800">{selectedPI.namaCustomer}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Alamat</p>
-                      <p className="text-sm font-semibold text-gray-800">{selectedPI.alamatCustomer || "-"}</p>
-                    </div>
-                  </div>
+                  <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Total Dipesan</p>
+                  <p className="text-xl font-bold text-blue-700 font-mono">{piLoadInfo.totalOrderedKG.toLocaleString()} KG</p>
                 </div>
-              )}
-
-              {!isDikuasakan && piLoadInfo && (
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                    <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Total Dipesan</p>
-                    <p className="text-xl font-bold text-blue-700 font-mono">{piLoadInfo.totalOrderedKG.toLocaleString()} KG</p>
-                  </div>
-                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
-                    <p className="text-xs text-amber-600 uppercase tracking-wide font-semibold">Sudah Dimuat</p>
-                    <p className="text-xl font-bold text-amber-700 font-mono">{piLoadInfo.totalLoadedKG.toLocaleString()} KG</p>
-                  </div>
-                  <div className="p-4 bg-green-50 rounded-xl border border-green-200">
-                    <p className="text-xs text-green-600 uppercase tracking-wide font-semibold">Sisa</p>
-                    <p className="text-xl font-bold text-green-700 font-mono">{piLoadInfo.remainingKG.toLocaleString()} KG</p>
-                  </div>
+                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                  <p className="text-xs text-amber-600 uppercase tracking-wide font-semibold">Sudah Dimuat</p>
+                  <p className="text-xl font-bold text-amber-700 font-mono">{piLoadInfo.totalLoadedKG.toLocaleString()} KG</p>
                 </div>
-              )}
+                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                  <p className="text-xs text-green-600 uppercase tracking-wide font-semibold">Sisa</p>
+                  <p className="text-xl font-bold text-green-700 font-mono">{piLoadInfo.remainingKG.toLocaleString()} KG</p>
+                </div>
+              </div>
+            )}
 
-              {!isDikuasakan && piLoadInfo && piLoadInfo.produkList.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Detail Per Produk</h4>
-                  <div className="space-y-2">
-                    {piLoadInfo.produkList.map((prod, idx) => (
-                      <div key={idx} className={`p-3 rounded-lg border ${prod.remainingKG > 0 ? "bg-yellow-50 border-yellow-200" : "bg-green-50 border-green-200"}`}>
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="font-semibold text-sm text-gray-800">{prod.namaProduk}</p>
-                            <p className="text-xs text-gray-500">FOT: {prod.fot} | Bobot: {prod.bobotPerUnit} KG/ZAK</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500">{prod.loadedKG.toLocaleString()} / {prod.orderedKG.toLocaleString()} KG</p>
-                            <p className={`text-sm font-bold ${prod.remainingKG > 0 ? "text-yellow-700" : "text-green-700"}`}>
-                              Sisa: {prod.remainingKG.toLocaleString()} KG ({Math.floor(prod.remainingKG / prod.bobotPerUnit)} ZAK)
-                            </p>
-                          </div>
+            {isFullForm && piLoadInfo && piLoadInfo.produkList.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Detail Per Produk</h4>
+                <div className="space-y-2">
+                  {piLoadInfo.produkList.map((prod, idx) => (
+                    <div key={idx} className={`p-3 rounded-lg border ${prod.remainingKG > 0 ? "bg-yellow-50 border-yellow-200" : "bg-green-50 border-green-200"}`}>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">{prod.namaProduk}</p>
+                          <p className="text-xs text-gray-500">FOT: {prod.fot} | Bobot: {prod.bobotPerUnit} KG/ZAK</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">{prod.loadedKG.toLocaleString()} / {prod.orderedKG.toLocaleString()} KG</p>
+                          <p className={`text-sm font-bold ${prod.remainingKG > 0 ? "text-yellow-700" : "text-green-700"}`}>
+                            Sisa: {prod.remainingKG.toLocaleString()} KG ({Math.floor(prod.remainingKG / prod.bobotPerUnit)} ZAK)
+                          </p>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-          </Card>
-        )}
+              </div>
+            )}
+          </div>
+        </Card>
 
-        {jenisSurat === "do" && subJenisDO === "mandiri" && (
+        {subJenisDO === "mandiri" && (
           <Card title="Informasi Penerima">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Input label="Kepada Yth (Nama)" type="text" name="kepadaNama" value={formData.kepadaNama} onChange={handleChange} placeholder="Contoh: Bapak Kepala Gudang" error={errors.kepadaNama} required />
@@ -1217,65 +1207,65 @@ export default function SuratPengangkutanPage() {
           </Card>
         )}
 
-        {isFullForm && (
-          <Card title="Dasar Pengangkutan">
-            <div className="space-y-4">
-              {items.map((item, idx) => (
-                <div key={item.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-gray-700">Item {idx + 1}</h4>
-                    {items.length > 1 && (
-                      <button type="button" onClick={() => removeItem(item.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleItemChange(item.id, "nomorSubDO", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`nomorSubDO_${idx}`]} required={jenisSurat === "do"} />
-                    <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleItemChange(item.id, "nomorPO", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`nomorPO_${idx}`]} required={jenisSurat === "do"} />
-                    <Input label="Jenis Pupuk" type="text" value={item.jenisPupuk} onChange={(e) => handleItemChange(item.id, "jenisPupuk", e.target.value)} placeholder="Otomatis dari PI" error={errors[`jenisPupuk_${idx}`]} required />
-                    <Input label="Party" type="text" value={item.party} onChange={(e) => handleItemChange(item.id, "party", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`party_${idx}`]} required={jenisSurat === "do"} />
-                    <div>
-                      <Input label={`Pengambilan (ZAK)${item.maxZAK > 0 ? ` - Max: ${item.maxZAK}` : ""}`} type="number" value={item.pengambilanZAK} onChange={(e) => handleItemChange(item.id, "pengambilanZAK", e.target.value)} placeholder={item.maxZAK > 0 ? `Max ${item.maxZAK} ZAK` : "Contoh: 100"} />
-                      {item.bobotPerUnit > 0 && item.pengambilanZAK && (
-                        <p className="mt-1 text-xs text-gray-500">
-                          = {(parseFloat(item.pengambilanZAK || "0") * item.bobotPerUnit).toLocaleString()} KG (bobot: {item.bobotPerUnit} KG/ZAK)
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <Input label="Sisa (ZAK)" type="text" value={item.sisa} onChange={(e) => handleItemChange(item.id, "sisa", e.target.value)} placeholder="Auto-calculate" readOnly />
-                      {item.bobotPerUnit > 0 && item.sisa && (
-                        <p className="mt-1 text-xs text-gray-500">
-                          = {(parseFloat(item.sisa || "0") * item.bobotPerUnit).toLocaleString()} KG
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {errors[`pengambilan_${idx}`] && (
-                    <p className="mt-2 text-sm text-red-600">{errors[`pengambilan_${idx}`]}</p>
+        <Card title="Dasar Pengangkutan">
+          <div className="space-y-4">
+            {items.map((item, idx) => (
+              <div key={item.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-gray-700">Item {idx + 1}</h4>
+                  {items.length > 1 && (
+                    <button type="button" onClick={() => removeItem(item.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   )}
                 </div>
-              ))}
-              <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Tambah Item
-              </Button>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleItemChange(item.id, "nomorSubDO", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`nomorSubDO_${idx}`]} required={subJenisDO === "mandiri"} />
+                  <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleItemChange(item.id, "nomorPO", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`nomorPO_${idx}`]} required={subJenisDO === "mandiri"} />
+                  <Input label="Jenis Pupuk" type="text" value={item.jenisPupuk} onChange={(e) => handleItemChange(item.id, "jenisPupuk", e.target.value)} placeholder="Otomatis dari PI" error={errors[`jenisPupuk_${idx}`]} required />
+                  <Input label="Party" type="text" value={item.party} onChange={(e) => handleItemChange(item.id, "party", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`party_${idx}`]} required={subJenisDO === "mandiri"} />
+                  <div>
+                    <Input label={`Pengambilan (ZAK)${item.maxZAK > 0 ? ` - Max: ${item.maxZAK}` : ""}`} type="number" value={item.pengambilanZAK} onChange={(e) => handleItemChange(item.id, "pengambilanZAK", e.target.value)} placeholder={item.maxZAK > 0 ? `Max ${item.maxZAK} ZAK` : "Contoh: 100"} />
+                    {item.bobotPerUnit > 0 && item.pengambilanZAK && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        = {(parseFloat(item.pengambilanZAK || "0") * item.bobotPerUnit).toLocaleString()} KG (bobot: {item.bobotPerUnit} KG/ZAK)
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <Input label="Sisa (ZAK)" type="text" value={item.sisa} onChange={(e) => handleItemChange(item.id, "sisa", e.target.value)} placeholder="Auto-calculate" readOnly />
+                    {item.bobotPerUnit > 0 && item.sisa && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        = {(parseFloat(item.sisa || "0") * item.bobotPerUnit).toLocaleString()} KG
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {errors[`pengambilan_${idx}`] && (
+                  <p className="mt-2 text-sm text-red-600">{errors[`pengambilan_${idx}`]}</p>
+                )}
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={addItem}>
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Tambah Item
+            </Button>
+          </div>
+        </Card>
+
+        {isFullForm && (
+          <Card title="Data Unit Angkutan">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Nomor Polisi Kendaraan" type="text" name="nomorPolisi" value={formData.nomorPolisi} onChange={handleChange} placeholder="Contoh: S 9701 JH" error={errors.nomorPolisi} required />
+              <Input label="Driver Unit" type="text" name="driverUnit" value={formData.driverUnit} onChange={handleChange} placeholder="Contoh: FUAD" error={errors.driverUnit} required />
+              <Input label="Nomor SIM (Opsional)" type="text" name="nomorSIM" value={formData.nomorSIM} onChange={handleChange} placeholder="Contoh: 1234567890" className="md:col-span-2" />
             </div>
           </Card>
         )}
-
-        <Card title="Data Unit Angkutan">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Nomor Polisi Kendaraan" type="text" name="nomorPolisi" value={formData.nomorPolisi} onChange={handleChange} placeholder="Contoh: S 9701 JH" error={errors.nomorPolisi} required />
-            <Input label="Driver Unit" type="text" name="driverUnit" value={formData.driverUnit} onChange={handleChange} placeholder="Contoh: FUAD" error={errors.driverUnit} required />
-            <Input label="Nomor SIM (Opsional)" type="text" name="nomorSIM" value={formData.nomorSIM} onChange={handleChange} placeholder="Contoh: 1234567890" className="md:col-span-2" />
-          </div>
-        </Card>
 
         <div className="flex items-center justify-end gap-4 pt-4">
           <Button type="button" variant="outline" onClick={() => { resetForm(); if (isFullForm) generateNomorSeri(); }}>
