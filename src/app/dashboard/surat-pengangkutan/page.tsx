@@ -25,6 +25,7 @@ interface ProformaInvoice {
   id: string;
   nomorPI: string;
   namaCustomer: string;
+  alamatCustomer?: string;
   tanggal: string;
   produkItems: Array<{
     namaProduk: string;
@@ -118,7 +119,9 @@ export default function SuratPengangkutanPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [jenisSurat, setJenisSurat] = useState<"gudangInduk" | "do" | "">("");
+  const [subJenisDO, setSubJenisDO] = useState<"mandiri" | "dikuasakan" | "">("");
   const [showJenisModal, setShowJenisModal] = useState(true);
+  const [showSubJenisModal, setShowSubJenisModal] = useState(false);
   const [nomorSeri, setNomorSeri] = useState("");
   const [nomorSeriError, setNomorSeriError] = useState("");
   const [piLoadInfo, setPiLoadInfo] = useState<PILoadInfo | null>(null);
@@ -156,10 +159,10 @@ export default function SuratPengangkutanPage() {
   }, []);
 
   useEffect(() => {
-    if (jenisSurat === "gudangInduk" && selectedPI) {
+    if ((jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri")) && selectedPI) {
       calculatePILoadInfo();
     }
-  }, [selectedPI, stockList, jenisSurat]);
+  }, [selectedPI, stockList, jenisSurat, subJenisDO]);
 
   useEffect(() => {
     if (urlNomorPI && piList.length > 0 && jenisSurat === "gudangInduk") {
@@ -244,6 +247,7 @@ export default function SuratPengangkutanPage() {
         id: doc.id,
         nomorPI: doc.data().nomorPI || "",
         namaCustomer: doc.data().namaCustomer || "",
+        alamatCustomer: doc.data().alamatCustomer || "",
         tanggal: doc.data().tanggal || "",
         produkItems: doc.data().produkItems || [],
         jumlahTertagih: doc.data().jumlahTertagih || 0,
@@ -415,7 +419,13 @@ export default function SuratPengangkutanPage() {
 
   const handlePISelect = (pi: ProformaInvoice) => {
     setSelectedPI(pi);
-    setFormData((prev) => ({ ...prev, nomorPI: pi.nomorPI }));
+    setFormData((prev) => ({
+      ...prev,
+      nomorPI: pi.nomorPI,
+      kepadaNama: pi.namaCustomer || "",
+      kepadaPerusahaan: pi.namaCustomer || "",
+      kepadaAlamat: pi.alamatCustomer || "",
+    }));
     setSearchPI(`${pi.nomorPI} - ${pi.namaCustomer}`);
     setShowPISearch(false);
   };
@@ -425,9 +435,12 @@ export default function SuratPengangkutanPage() {
       const searchLower = searchPI.toLowerCase();
       const matchSearch = pi.nomorPI.toLowerCase().includes(searchLower) || pi.namaCustomer.toLowerCase().includes(searchLower);
       if (!matchSearch) return false;
-      const totalOrdered = pi.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
-      const totalLoaded = piLoadInfo && piLoadInfo.nomorPI === pi.nomorPI ? piLoadInfo.totalLoadedKG : 0;
-      return totalLoaded < totalOrdered;
+      if (jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri")) {
+        const totalOrdered = pi.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
+        const totalLoaded = piLoadInfo && piLoadInfo.nomorPI === pi.nomorPI ? piLoadInfo.totalLoadedKG : 0;
+        return totalLoaded < totalOrdered;
+      }
+      return true;
     });
   };
 
@@ -495,12 +508,24 @@ export default function SuratPengangkutanPage() {
     if (!formData.namaKabupaten.trim()) newErrors.namaKabupaten = "Nama kabupaten wajib diisi";
     if (!formData.driverUnit.trim()) newErrors.driverUnit = "Driver unit wajib diisi";
     if (!formData.nomorPolisi.trim()) newErrors.nomorPolisi = "Nomor polisi wajib diisi";
-    if (!nomorSeri.trim()) newErrors.nomorSeri = "Nomor seri wajib diisi";
-    if (nomorSeriError) newErrors.nomorSeri = nomorSeriError;
+
+    const isFullForm = jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri");
+    const isDikuasakan = jenisSurat === "do" && subJenisDO === "dikuasakan";
+
+    if (isFullForm) {
+      if (!nomorSeri.trim()) newErrors.nomorSeri = "Nomor seri wajib diisi";
+      if (nomorSeriError) newErrors.nomorSeri = nomorSeriError;
+    }
+
     if (jenisSurat === "gudangInduk") {
       if (!selectedPI) newErrors.nomorPI = "Nomor PI wajib dipilih";
     }
-    if (jenisSurat === "do") {
+
+    if (isDikuasakan) {
+      if (!selectedPI) newErrors.nomorPI = "Nomor PI wajib dipilih";
+    }
+
+    if (jenisSurat === "do" && subJenisDO === "mandiri") {
       if (!formData.nomorSubDO.trim()) newErrors.nomorSubDO = "Nomor Sub DO wajib diisi";
       if (!formData.nomorPO.trim()) newErrors.nomorPO = "Nomor PO wajib diisi";
       if (!formData.party.trim()) newErrors.party = "Party wajib diisi";
@@ -508,19 +533,23 @@ export default function SuratPengangkutanPage() {
       if (!formData.kepadaPerusahaan.trim()) newErrors.kepadaPerusahaan = "Nama perusahaan wajib diisi";
       if (!formData.kepadaAlamat.trim()) newErrors.kepadaAlamat = "Alamat wajib diisi";
     }
-    items.forEach((item, idx) => {
-      if (!item.jenisPupuk.trim()) newErrors[`jenisPupuk_${idx}`] = "Jenis pupuk wajib diisi";
-      if (jenisSurat === "do" && !item.party.trim()) newErrors[`party_${idx}`] = "Party wajib diisi";
-      if (!item.pengambilanZAK.trim()) {
-        newErrors[`pengambilan_${idx}`] = "Pengambilan wajib diisi";
-      } else {
-        const zak = parseFloat(item.pengambilanZAK) || 0;
-        if (zak <= 0) newErrors[`pengambilan_${idx}`] = "Pengambilan harus lebih dari 0";
-        if (jenisSurat === "gudangInduk" && zak > item.maxZAK && item.maxZAK > 0) {
-          newErrors[`pengambilan_${idx}`] = `Maksimal ${item.maxZAK} ZAK (${item.maxZAK * item.bobotPerUnit} KG)`;
+
+    if (isFullForm) {
+      items.forEach((item, idx) => {
+        if (!item.jenisPupuk.trim()) newErrors[`jenisPupuk_${idx}`] = "Jenis pupuk wajib diisi";
+        if (jenisSurat === "do" && subJenisDO === "mandiri" && !item.party.trim()) newErrors[`party_${idx}`] = "Party wajib diisi";
+        if (!item.pengambilanZAK.trim()) {
+          newErrors[`pengambilan_${idx}`] = "Pengambilan wajib diisi";
+        } else {
+          const zak = parseFloat(item.pengambilanZAK) || 0;
+          if (zak <= 0) newErrors[`pengambilan_${idx}`] = "Pengambilan harus lebih dari 0";
+          if (jenisSurat === "gudangInduk" && zak > item.maxZAK && item.maxZAK > 0) {
+            newErrors[`pengambilan_${idx}`] = `Maksimal ${item.maxZAK} ZAK (${item.maxZAK * item.bobotPerUnit} KG)`;
+          }
         }
-      }
-    });
+      });
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -531,16 +560,33 @@ export default function SuratPengangkutanPage() {
     setIsSubmitting(true);
     setSuccessMessage("");
     try {
-      const totalPengambilanKG = items.reduce((sum, item) => {
-        const zak = parseFloat(item.pengambilanZAK) || 0;
-        return sum + zak * item.bobotPerUnit;
-      }, 0);
+      const isFullForm = jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri");
+      const isDikuasakan = jenisSurat === "do" && subJenisDO === "dikuasakan";
+
+      let totalPengambilanKG = 0;
+      if (isFullForm) {
+        totalPengambilanKG = items.reduce((sum, item) => {
+          const zak = parseFloat(item.pengambilanZAK) || 0;
+          return sum + zak * item.bobotPerUnit;
+        }, 0);
+      }
+
       const suratData: any = {
         jenisSurat,
+        subJenisDO: subJenisDO || null,
         tanggal: formData.tanggal,
         namaKabupaten: formData.namaKabupaten,
-        nomorSeri: nomorSeri.trim(),
-        items: items.map((item) => ({
+        nomorPolisi: formData.nomorPolisi.trim(),
+        driverUnit: formData.driverUnit.trim(),
+        nomorSIM: formData.nomorSIM.trim() || null,
+        createdBy: user?.nama || "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (isFullForm) {
+        suratData.nomorSeri = nomorSeri.trim();
+        suratData.items = items.map((item) => ({
           nomorSubDO: item.nomorSubDO,
           nomorPO: item.nomorPO,
           jenisPupuk: item.jenisPupuk,
@@ -550,17 +596,12 @@ export default function SuratPengangkutanPage() {
           totalKG: (parseFloat(item.pengambilanZAK) || 0) * item.bobotPerUnit,
           sisa: item.sisa,
           fot: item.fot,
-        })),
-        nomorPolisi: formData.nomorPolisi.trim(),
-        driverUnit: formData.driverUnit.trim(),
-        nomorSIM: formData.nomorSIM.trim() || null,
-        createdBy: user?.nama || "",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
+        }));
+        suratData.totalPengambilanKG = totalPengambilanKG;
+      }
+
       if (jenisSurat === "gudangInduk" && selectedPI) {
         suratData.nomorPI = selectedPI.nomorPI;
-        suratData.totalPengambilanKG = totalPengambilanKG;
         const piRef = doc(db, "proformaInvoice", selectedPI.id);
         const piSnap = await getDoc(piRef);
         const piData = piSnap.exists() ? piSnap.data() : null;
@@ -593,27 +634,46 @@ export default function SuratPengangkutanPage() {
           }
         }
       }
-      if (jenisSurat === "do") {
+
+      if (jenisSurat === "do" && subJenisDO === "mandiri") {
         suratData.kepadaNama = formData.kepadaNama.trim();
         suratData.kepadaPerusahaan = formData.kepadaPerusahaan.trim();
         suratData.kepadaAlamat = formData.kepadaAlamat.trim();
       }
+
+      if (isDikuasakan && selectedPI) {
+        suratData.nomorPI = selectedPI.nomorPI;
+        suratData.kepadaNama = selectedPI.namaCustomer || "";
+        suratData.kepadaPerusahaan = selectedPI.namaCustomer || "";
+        suratData.kepadaAlamat = selectedPI.alamatCustomer || "";
+        suratData.items = [];
+        suratData.totalPengambilanKG = 0;
+      }
+
       await addDoc(collection(db, "suratPengangkutan"), suratData);
-      const transaksiData = {
+
+      const transaksiData: any = {
         tanggal: formData.tanggal,
         jenis: jenisSurat === "gudangInduk" ? "suratPengangkutanGudangInduk" : "suratPengangkutanDO",
-        nomorSeri: nomorSeri.trim(),
-        items: suratData.items,
+        nomorSeri: isFullForm ? nomorSeri.trim() : null,
+        items: suratData.items || [],
+        totalPengambilanKG: suratData.totalPengambilanKG || 0,
         nomorPolisi: formData.nomorPolisi,
         driverUnit: formData.driverUnit,
         nomorSIM: formData.nomorSIM || null,
         createdBy: user?.nama || "",
         createdAt: serverTimestamp(),
       };
+
+      if (selectedPI) {
+        transaksiData.nomorPI = selectedPI.nomorPI;
+        transaksiData.namaCustomer = selectedPI.namaCustomer;
+      }
+
       await addDoc(collection(db, "transaksiBarangKeluar"), transaksiData);
       setSuccessMessage("Surat pengangkutan berhasil dibuat!");
       resetForm();
-      generateNomorSeri();
+      if (isFullForm) generateNomorSeri();
       fetchExistingSurat();
       fetchStockGudang();
       setTimeout(() => setSuccessMessage(""), 5000);
@@ -833,7 +893,7 @@ export default function SuratPengangkutanPage() {
           </div>
           <div className="grid grid-cols-1 gap-4">
             <button
-              onClick={() => { setJenisSurat("gudangInduk"); setShowJenisModal(false); generateNomorSeri(); }}
+              onClick={() => { setJenisSurat("gudangInduk"); setShowJenisModal(false); setShowSubJenisModal(false); generateNomorSeri(); }}
               className="p-6 border-2 border-green-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all text-left group"
             >
               <div className="flex items-center gap-4">
@@ -849,7 +909,7 @@ export default function SuratPengangkutanPage() {
               </div>
             </button>
             <button
-              onClick={() => { setJenisSurat("do"); setShowJenisModal(false); generateNomorSeri(); }}
+              onClick={() => { setJenisSurat("do"); setShowJenisModal(false); setShowSubJenisModal(true); }}
               className="p-6 border-2 border-blue-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
             >
               <div className="flex items-center gap-4">
@@ -860,7 +920,7 @@ export default function SuratPengangkutanPage() {
                 </div>
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">Surat DO (Delivery Order)</h3>
-                  <p className="text-sm text-gray-500">Untuk pengiriman langsung tanpa referensi Proforma Invoice</p>
+                  <p className="text-sm text-gray-500">Untuk pengiriman langsung dengan opsi Mandiri atau Dikuasakan</p>
                 </div>
               </div>
             </button>
@@ -870,18 +930,80 @@ export default function SuratPengangkutanPage() {
     );
   }
 
+  if (showSubJenisModal && jenisSurat === "do") {
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">Pilih Sub Jenis DO</h2>
+            <p className="text-gray-500 mt-2">Silakan pilih tipe surat DO yang ingin dibuat</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4">
+            <button
+              onClick={() => { setSubJenisDO("mandiri"); setShowSubJenisModal(false); generateNomorSeri(); }}
+              className="p-6 border-2 border-indigo-200 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
+                  <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg">DO Mandiri</h3>
+                  <p className="text-sm text-gray-500">Sistem lengkap dengan nomor seri, dasar pengangkutan, dan proforma invoice</p>
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => { setSubJenisDO("dikuasakan"); setShowSubJenisModal(false); }}
+              className="p-6 border-2 border-orange-200 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition-all text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+                  <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg">DO Dikuasakan</h3>
+                  <p className="text-sm text-gray-500">Form sederhana tanpa nomor seri dan dasar pengangkutan. Penerima otomatis dari data PI.</p>
+                </div>
+              </div>
+            </button>
+          </div>
+          <button
+            onClick={() => { setShowSubJenisModal(false); setShowJenisModal(true); setJenisSurat(""); }}
+            className="mt-6 w-full py-3 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            Kembali ke Pilih Jenis Surat
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const isFullForm = jenisSurat === "gudangInduk" || (jenisSurat === "do" && subJenisDO === "mandiri");
+  const isDikuasakan = jenisSurat === "do" && subJenisDO === "dikuasakan";
+  const pageTitle = jenisSurat === "gudangInduk" ? "Gudang Induk" : subJenisDO === "mandiri" ? "DO Mandiri" : "DO Dikuasakan";
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <Header
-          title={`Surat Pengangkutan - ${jenisSurat === "gudangInduk" ? "Gudang Induk" : "DO"}`}
+          title={`Surat Pengangkutan - ${pageTitle}`}
           subtitle="Buat surat pengangkutan untuk pemuatan barang"
         />
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => { setShowJenisModal(true); setJenisSurat(""); resetForm(); }}
+          onClick={() => { setShowJenisModal(true); setJenisSurat(""); setSubJenisDO(""); resetForm(); }}
         >
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -929,34 +1051,36 @@ export default function SuratPengangkutanPage() {
               error={errors.namaKabupaten}
               required
             />
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nomor Seri</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={nomorSeri}
-                  onChange={handleNomorSeriChange}
-                  placeholder="Masukkan nomor seri surat pengangkutan"
-                  className={`flex-1 px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all font-mono text-sm ${nomorSeriError ? "border-red-500 bg-red-50" : "border-gray-300"}`}
-                />
-                <Button type="button" variant="outline" size="sm" onClick={generateNomorSeri}>
-                  Generate
-                </Button>
+            {isFullForm && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nomor Seri</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={nomorSeri}
+                    onChange={handleNomorSeriChange}
+                    placeholder="Masukkan nomor seri surat pengangkutan"
+                    className={`flex-1 px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all font-mono text-sm ${nomorSeriError ? "border-red-500 bg-red-50" : "border-gray-300"}`}
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={generateNomorSeri}>
+                    Generate
+                  </Button>
+                </div>
+                {nomorSeriError && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {nomorSeriError}
+                  </p>
+                )}
               </div>
-              {nomorSeriError && (
-                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {nomorSeriError}
-                </p>
-              )}
-            </div>
+            )}
           </div>
         </Card>
 
-        {jenisSurat === "gudangInduk" && (
-          <Card title="Proforma Invoice" className="overflow-visible">
+        {(jenisSurat === "gudangInduk" || isDikuasakan) && (
+          <Card title={isDikuasakan ? "Pilih Proforma Invoice" : "Proforma Invoice"} className="overflow-visible">
             <div className="space-y-4">
               <div ref={searchRef} className="relative z-50 overflow-visible">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -972,6 +1096,15 @@ export default function SuratPengangkutanPage() {
                       setSelectedPI(null);
                       setPiLoadInfo(null);
                       setItems([]);
+                      if (isDikuasakan) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          nomorPI: "",
+                          kepadaNama: "",
+                          kepadaPerusahaan: "",
+                          kepadaAlamat: "",
+                        }));
+                      }
                     }
                   }}
                   onFocus={() => setShowPISearch(true)}
@@ -981,7 +1114,7 @@ export default function SuratPengangkutanPage() {
                 {showPISearch && (
                   <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-[400px] overflow-y-auto z-[9999]" onMouseDown={(e) => e.preventDefault()}>
                     {searchPI && filteredPIList.length === 0 ? (
-                      <div className="p-4 text-sm text-gray-500">Tidak ada PI yang tersedia (semua sudah selesai dimuat atau tidak cocok)</div>
+                      <div className="p-4 text-sm text-gray-500">Tidak ada PI yang tersedia atau tidak cocok</div>
                     ) : !searchPI ? (
                       <div className="p-3 text-xs text-gray-400">Ketik minimal 1 karakter untuk mencari PI</div>
                     ) : (
@@ -998,7 +1131,9 @@ export default function SuratPengangkutanPage() {
                           >
                             <p className="font-semibold text-gray-800">{pi.nomorPI}</p>
                             <p className="text-sm text-gray-500">{pi.namaCustomer} | {pi.tanggal}</p>
-                            <p className="text-xs text-green-600 mt-1">Total: {totalOrdered.toLocaleString()} KG | Sisa: {sisa.toLocaleString()} KG</p>
+                            {!isDikuasakan && (
+                              <p className="text-xs text-green-600 mt-1">Total: {totalOrdered.toLocaleString()} KG | Sisa: {sisa.toLocaleString()} KG</p>
+                            )}
                           </button>
                         );
                       })
@@ -1008,7 +1143,27 @@ export default function SuratPengangkutanPage() {
                 {errors.nomorPI && <p className="mt-1 text-sm text-red-600">{errors.nomorPI}</p>}
               </div>
 
-              {piLoadInfo && (
+              {isDikuasakan && selectedPI && (
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                  <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold mb-2">Data Penerima dari PI</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Nama</p>
+                      <p className="text-sm font-semibold text-gray-800">{selectedPI.namaCustomer}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Perusahaan</p>
+                      <p className="text-sm font-semibold text-gray-800">{selectedPI.namaCustomer}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Alamat</p>
+                      <p className="text-sm font-semibold text-gray-800">{selectedPI.alamatCustomer || "-"}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!isDikuasakan && piLoadInfo && (
                 <div className="grid grid-cols-3 gap-4">
                   <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
                     <p className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Total Dipesan</p>
@@ -1025,7 +1180,7 @@ export default function SuratPengangkutanPage() {
                 </div>
               )}
 
-              {piLoadInfo && piLoadInfo.produkList.length > 0 && (
+              {!isDikuasakan && piLoadInfo && piLoadInfo.produkList.length > 0 && (
                 <div className="mt-4">
                   <h4 className="text-sm font-semibold text-gray-700 mb-2">Detail Per Produk</h4>
                   <div className="space-y-2">
@@ -1052,7 +1207,7 @@ export default function SuratPengangkutanPage() {
           </Card>
         )}
 
-        {jenisSurat === "do" && (
+        {jenisSurat === "do" && subJenisDO === "mandiri" && (
           <Card title="Informasi Penerima">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Input label="Kepada Yth (Nama)" type="text" name="kepadaNama" value={formData.kepadaNama} onChange={handleChange} placeholder="Contoh: Bapak Kepala Gudang" error={errors.kepadaNama} required />
@@ -1062,55 +1217,57 @@ export default function SuratPengangkutanPage() {
           </Card>
         )}
 
-        <Card title="Dasar Pengangkutan">
-          <div className="space-y-4">
-            {items.map((item, idx) => (
-              <div key={item.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-semibold text-gray-700">Item {idx + 1}</h4>
-                  {items.length > 1 && (
-                    <button type="button" onClick={() => removeItem(item.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+        {isFullForm && (
+          <Card title="Dasar Pengangkutan">
+            <div className="space-y-4">
+              {items.map((item, idx) => (
+                <div key={item.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-gray-700">Item {idx + 1}</h4>
+                    {items.length > 1 && (
+                      <button type="button" onClick={() => removeItem(item.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleItemChange(item.id, "nomorSubDO", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`nomorSubDO_${idx}`]} required={jenisSurat === "do"} />
+                    <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleItemChange(item.id, "nomorPO", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`nomorPO_${idx}`]} required={jenisSurat === "do"} />
+                    <Input label="Jenis Pupuk" type="text" value={item.jenisPupuk} onChange={(e) => handleItemChange(item.id, "jenisPupuk", e.target.value)} placeholder="Otomatis dari PI" error={errors[`jenisPupuk_${idx}`]} required />
+                    <Input label="Party" type="text" value={item.party} onChange={(e) => handleItemChange(item.id, "party", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`party_${idx}`]} required={jenisSurat === "do"} />
+                    <div>
+                      <Input label={`Pengambilan (ZAK)${item.maxZAK > 0 ? ` - Max: ${item.maxZAK}` : ""}`} type="number" value={item.pengambilanZAK} onChange={(e) => handleItemChange(item.id, "pengambilanZAK", e.target.value)} placeholder={item.maxZAK > 0 ? `Max ${item.maxZAK} ZAK` : "Contoh: 100"} />
+                      {item.bobotPerUnit > 0 && item.pengambilanZAK && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          = {(parseFloat(item.pengambilanZAK || "0") * item.bobotPerUnit).toLocaleString()} KG (bobot: {item.bobotPerUnit} KG/ZAK)
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <Input label="Sisa (ZAK)" type="text" value={item.sisa} onChange={(e) => handleItemChange(item.id, "sisa", e.target.value)} placeholder="Auto-calculate" readOnly />
+                      {item.bobotPerUnit > 0 && item.sisa && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          = {(parseFloat(item.sisa || "0") * item.bobotPerUnit).toLocaleString()} KG
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {errors[`pengambilan_${idx}`] && (
+                    <p className="mt-2 text-sm text-red-600">{errors[`pengambilan_${idx}`]}</p>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleItemChange(item.id, "nomorSubDO", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`nomorSubDO_${idx}`]} required={jenisSurat === "do"} />
-                  <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleItemChange(item.id, "nomorPO", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`nomorPO_${idx}`]} required={jenisSurat === "do"} />
-                  <Input label="Jenis Pupuk" type="text" value={item.jenisPupuk} onChange={(e) => handleItemChange(item.id, "jenisPupuk", e.target.value)} placeholder="Otomatis dari PI" error={errors[`jenisPupuk_${idx}`]} required />
-                  <Input label="Party" type="text" value={item.party} onChange={(e) => handleItemChange(item.id, "party", e.target.value)} placeholder={jenisSurat === "do" ? "Wajib" : "Opsional"} error={errors[`party_${idx}`]} required={jenisSurat === "do"} />
-                  <div>
-                    <Input label={`Pengambilan (ZAK)${item.maxZAK > 0 ? ` - Max: ${item.maxZAK}` : ""}`} type="number" value={item.pengambilanZAK} onChange={(e) => handleItemChange(item.id, "pengambilanZAK", e.target.value)} placeholder={item.maxZAK > 0 ? `Max ${item.maxZAK} ZAK` : "Contoh: 100"} />
-                    {item.bobotPerUnit > 0 && item.pengambilanZAK && (
-                      <p className="mt-1 text-xs text-gray-500">
-                        = {(parseFloat(item.pengambilanZAK || "0") * item.bobotPerUnit).toLocaleString()} KG (bobot: {item.bobotPerUnit} KG/ZAK)
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <Input label="Sisa (ZAK)" type="text" value={item.sisa} onChange={(e) => handleItemChange(item.id, "sisa", e.target.value)} placeholder="Auto-calculate" readOnly />
-                    {item.bobotPerUnit > 0 && item.sisa && (
-                      <p className="mt-1 text-xs text-gray-500">
-                        = {(parseFloat(item.sisa || "0") * item.bobotPerUnit).toLocaleString()} KG
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {errors[`pengambilan_${idx}`] && (
-                  <p className="mt-2 text-sm text-red-600">{errors[`pengambilan_${idx}`]}</p>
-                )}
-              </div>
-            ))}
-            <Button type="button" variant="outline" size="sm" onClick={addItem}>
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Tambah Item
-            </Button>
-          </div>
-        </Card>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Tambah Item
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <Card title="Data Unit Angkutan">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1121,16 +1278,18 @@ export default function SuratPengangkutanPage() {
         </Card>
 
         <div className="flex items-center justify-end gap-4 pt-4">
-          <Button type="button" variant="outline" onClick={() => { resetForm(); generateNomorSeri(); }}>
+          <Button type="button" variant="outline" onClick={() => { resetForm(); if (isFullForm) generateNomorSeri(); }}>
             Reset Form
           </Button>
-          <Button type="button" variant="secondary" onClick={handlePrintPDF}>
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            Preview PDF
-          </Button>
-          <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting} disabled={!!nomorSeriError}>
+          {isFullForm && (
+            <Button type="button" variant="secondary" onClick={handlePrintPDF}>
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Preview PDF
+            </Button>
+          )}
+          <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting} disabled={isFullForm && !!nomorSeriError}>
             Simpan Surat Pengangkutan
           </Button>
         </div>
