@@ -41,6 +41,7 @@ interface ProdukItem {
 interface SuratMuatItem {
   nomorSubDO?: string;
   nomorPO?: string;
+  nomorPI?: string;
   jenisPupuk: string;
   party?: string;
   pengambilanZAK: number;
@@ -60,6 +61,8 @@ interface SuratMuatInfo {
   driverUnit: string;
   nomorPI: string;
   nomorSIM?: string;
+  jenisSurat?: string;
+  subJenisDO?: string;
 }
 
 interface ProformaInvoice {
@@ -84,8 +87,8 @@ interface ProformaInvoice {
   ttdJabatan: string;
   ttdImage: string;
   createdBy: string;
-  createdAt: any;
-  updatedAt: any;
+  createdAt: Date;
+  updatedAt: Date;
   sisaPengambilanKG?: number;
   statusPengangkutan?: string;
   invoiceBaseNumber?: string;
@@ -216,12 +219,37 @@ export default function RekapProformaInvoicePage() {
     try {
       const q = query(collection(db, "proformaInvoice"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
-      const items = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate(),
-        updatedAt: doc.data().updatedAt?.toDate(),
-      } as ProformaInvoice));
+      const items = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          tanggal: d.tanggal || "",
+          nomorPI: d.nomorPI || "",
+          namaCustomer: d.namaCustomer || "",
+          alamatCustomer: d.alamatCustomer || "",
+          npwp: d.npwp || "",
+          metodePembayaran: d.metodePembayaran || "Transfer",
+          produkItems: d.produkItems || [],
+          uangMuka: d.uangMuka || 0,
+          includePPN: d.includePPN || false,
+          ppnNominal: d.ppnNominal || 0,
+          ongkosKirim: d.ongkosKirim || 0,
+          subtotal: d.subtotal || 0,
+          jumlahTertagih: d.jumlahTertagih || 0,
+          terbilang: d.terbilang || "",
+          tanggalJatuhTempo: d.tanggalJatuhTempo || "",
+          keterangan: d.keterangan || "",
+          ttdNama: d.ttdNama || "",
+          ttdJabatan: d.ttdJabatan || "",
+          ttdImage: d.ttdImage || "",
+          createdBy: d.createdBy || "",
+          createdAt: d.createdAt?.toDate(),
+          updatedAt: d.updatedAt?.toDate(),
+          sisaPengambilanKG: d.sisaPengambilanKG,
+          statusPengangkutan: d.statusPengangkutan,
+          invoiceBaseNumber: d.invoiceBaseNumber,
+        } as ProformaInvoice;
+      });
       setData(items);
     } catch (error) {
       console.error(error);
@@ -234,14 +262,14 @@ export default function RekapProformaInvoicePage() {
     try {
       const q = query(collection(db, "stockGudang"), orderBy("namaBarang", "asc"));
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        namaBarang: doc.data().namaBarang || "",
-        bobotPerUnit: doc.data().bobotPerUnit || 50,
-        stokAkhirUnit: doc.data().stokAkhirUnit || 0,
-        stokAkhirKG: doc.data().stokAkhirKG || 0,
-        barangKeluarUnit: doc.data().barangKeluarUnit || 0,
-        barangKeluarKG: doc.data().barangKeluarKG || 0,
+      const data = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        namaBarang: docSnap.data().namaBarang || "",
+        bobotPerUnit: docSnap.data().bobotPerUnit || 50,
+        stokAkhirUnit: docSnap.data().stokAkhirUnit || 0,
+        stokAkhirKG: docSnap.data().stokAkhirKG || 0,
+        barangKeluarUnit: docSnap.data().barangKeluarUnit || 0,
+        barangKeluarKG: docSnap.data().barangKeluarKG || 0,
       } as StockItem));
       setStockList(data);
     } catch (error) {
@@ -253,9 +281,9 @@ export default function RekapProformaInvoicePage() {
     try {
       const q = query(collection(db, "suratPengangkutan"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        nomorSeri: doc.data().nomorSeri || "",
+      const data = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        nomorSeri: docSnap.data().nomorSeri || "",
       } as ExistingSurat));
       setExistingSuratList(data);
     } catch (error) {
@@ -267,7 +295,7 @@ export default function RekapProformaInvoicePage() {
     try {
       const q = query(collection(db, "ttd"), orderBy("nama", "asc"));
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TTDData));
+      const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as TTDData));
       setTtdList(data);
     } catch (error) {
       console.error(error);
@@ -313,6 +341,8 @@ export default function RekapProformaInvoicePage() {
           driverUnit: d.driverUnit || "",
           nomorPI: d.nomorPI || "",
           nomorSIM: d.nomorSIM || "",
+          jenisSurat: d.jenisSurat || "gudangInduk",
+          subJenisDO: d.subJenisDO || null,
         };
         piList.forEach((pi) => {
           if (!map[pi]) map[pi] = [];
@@ -442,16 +472,6 @@ export default function RekapProformaInvoicePage() {
     if (!baseNumber) {
       baseNumber = await getNextInvoiceBaseNumber();
       await updateDoc(piRef, { invoiceBaseNumber: baseNumber });
-    }
-
-    const totalOrdered = getTotalOrdered(selectedItem);
-    const totalLoaded = getTotalLoaded(selectedItem.nomorPI);
-    const isComplete = totalLoaded >= totalOrdered;
-
-    if (isComplete) {
-      const nomor = `BAGB-INV-${baseNumber}`;
-      await updateDoc(suratRef, { nomorInvoice: nomor });
-      return nomor;
     }
 
     const partialCount = await getPartialCountForPI(selectedItem.nomorPI);
@@ -611,7 +631,7 @@ export default function RekapProformaInvoicePage() {
         fot: "",
       }));
       const totalPengambilanKG = newItems.reduce((sum, it) => sum + it.totalKG, 0);
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         tanggal: editSuratForm.tanggal,
         nomorSeri: newNomorSeri,
         nomorPolisi: editSuratForm.nomorPolisi.trim(),
@@ -905,7 +925,7 @@ export default function RekapProformaInvoicePage() {
               <div class="info-row">
                 <div class="customer-box">
                   <p class="customer-name">${item.namaCustomer || ""}</p>
-                  <p class="customer-address">${(item.alamatCustomer || "").split("\n").join("<br>")}</p>
+                  <p class="customer-address">${(item.alamatCustomer || "").replace(/\n/g, "<br>")}</p>
                 </div>
                 <div class="invoice-meta">
                   <div class="meta-row">
@@ -1022,13 +1042,14 @@ export default function RekapProformaInvoicePage() {
   const handlePrintSuratPDF = (surat: SuratMuatInfo) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
+    const isGI = !surat.jenisSurat || surat.jenisSurat === "gudangInduk";
     const itemsHtml = (surat.items || [])
       .map(
         (it, idx) => `
         <tr>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${idx + 1}</td>
-          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorSubDO || "-"}</td>
-          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorPO || "-"}</td>
+          ${!isGI ? `<td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorSubDO || "-"}</td>` : ""}
+          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${isGI ? (it.nomorPI || surat.nomorPI || "-") : (it.nomorPO || "-")}</td>
           <td style="padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600;">${it.jenisPupuk || ""}</td>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.party || "-"}</td>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.pengambilanZAK || "-"} ZAK</td>
@@ -1037,9 +1058,6 @@ export default function RekapProformaInvoicePage() {
       `
       )
       .join("");
-    const piBadge = selectedItem
-      ? `<span style="display: inline-block; background: #dcfce7; padding: 2px 8px; border-radius: 4px; margin-right: 4px; font-size: 10px; font-weight: 600;">${selectedItem.nomorPI}</span>`
-      : '<span style="font-size: 10px; color: #666;">-</span>';
     const html = `
       <!DOCTYPE html>
       <html>
@@ -1105,16 +1123,13 @@ export default function RekapProformaInvoicePage() {
             <p>Dengan Hormat,</p>
             <p>Dengan ini mohon dimuatkan pupuk dengan rincian sebagai berikut :</p>
           </div>
-          <div style="margin-bottom: 8px; font-size: 10px;">
-            <span style="font-weight: 600;">Nomor Proforma Invoice : </span>${piBadge}
-          </div>
           <div class="table-section">
             <div class="table-title">DASAR PENGANGKUTAN</div>
             <table class="data-table">
               <thead>
                 <tr>
                   <th style="width: 30px;">NO</th>
-                  <th style="width: 100px;">NOMOR SUB DO</th>
+                  ${!isGI ? `<th style="width: 100px;">NOMOR SUB DO</th>` : ""}
                   <th style="width: 100px;">NOMOR PO</th>
                   <th>JENIS PUPUK</th>
                   <th style="width: 60px;">PARTY</th>
@@ -1172,31 +1187,31 @@ export default function RekapProformaInvoicePage() {
   };
 
   const handleOpenFullInvoice = async (row: ProformaInvoice) => {
-  setSelectedItem(row);
-  setInvoiceSurat(null);
-  setSelectedOrderTTD("");
-  setInvoiceNomor("");
-  setShowRegenerateButton(false);
-  setIsInvoiceModalOpen(true);
-  setIsGeneratingInvoice(true);
-  try {
-    const piRef = doc(db, "proformaInvoice", row.id);
-    const piSnap = await getDoc(piRef);
-    let baseNumber = piSnap.data()?.invoiceBaseNumber;
-    if (!baseNumber) {
-      baseNumber = await getNextInvoiceBaseNumber();
-      await updateDoc(piRef, { invoiceBaseNumber: baseNumber });
+    setSelectedItem(row);
+    setInvoiceSurat(null);
+    setSelectedOrderTTD("");
+    setInvoiceNomor("");
+    setShowRegenerateButton(false);
+    setIsInvoiceModalOpen(true);
+    setIsGeneratingInvoice(true);
+    try {
+      const piRef = doc(db, "proformaInvoice", row.id);
+      const piSnap = await getDoc(piRef);
+      let baseNumber = piSnap.data()?.invoiceBaseNumber;
+      if (!baseNumber) {
+        baseNumber = await getNextInvoiceBaseNumber();
+        await updateDoc(piRef, { invoiceBaseNumber: baseNumber });
+      }
+      const nomor = `BAGB-INV-${baseNumber}`;
+      setInvoiceNomor(nomor);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsGeneratingInvoice(false);
     }
-    const nomor = `BAGB-INV-${baseNumber}`;
-    setInvoiceNomor(nomor);
-  } catch (error) {
-    console.error(error);
-  } finally {
-    setIsGeneratingInvoice(false);
-  }
-};
+  };
 
-const handleOpenInvoice = async (surat: SuratMuatInfo) => {
+  const handleOpenInvoice = async (surat: SuratMuatInfo) => {
     setInvoiceSurat(surat);
     setSelectedOrderTTD("");
     setInvoiceNomor("");
@@ -1221,8 +1236,22 @@ const handleOpenInvoice = async (surat: SuratMuatInfo) => {
     if (!selectedItem || !invoiceNomor) return;
     const pi = selectedItem;
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
+    const allSuratForDate = getSuratMuatForPI(pi.nomorPI);
+    const lastSurat = allSuratForDate.length > 0 ? allSuratForDate[allSuratForDate.length - 1] : null;
+    const invoiceDate = lastSurat ? lastSurat.tanggal : pi.tanggal;
 
-    let invoiceItems: any[] = [];
+    let invoiceItems: Array<{
+      no: number;
+      namaProduk: string;
+      produsen: string;
+      kemasan: string;
+      fot: string;
+      kuantitas: number;
+      satuan: string;
+      hargaSatuan: number;
+      hargaPerZakDus: number;
+      subTotal: number;
+    }> = [];
     if (invoiceSurat) {
       const surat = invoiceSurat;
       invoiceItems = (surat.items || []).map((it, idx) => {
@@ -1250,7 +1279,18 @@ const handleOpenInvoice = async (surat: SuratMuatInfo) => {
       });
     } else {
       const allSurat = getSuratMuatForPI(pi.nomorPI);
-      const mergedMap: Record<string, any> = {};
+      const mergedMap: Record<string, {
+        no: number;
+        namaProduk: string;
+        produsen: string;
+        kemasan: string;
+        fot: string;
+        kuantitas: number;
+        satuan: string;
+        hargaSatuan: number;
+        hargaPerZakDus: number;
+        subTotal: number;
+      }> = {};
       let no = 1;
       allSurat.forEach((surat) => {
         (surat.items || []).forEach((it) => {
@@ -1381,12 +1421,12 @@ const handleOpenInvoice = async (surat: SuratMuatInfo) => {
             <div class="customer-box">
               <p class="customer-title">Kepada Yth,</p>
               <p class="customer-name">${pi.namaCustomer || ""}</p>
-              <p>${(pi.alamatCustomer || "").split("\n").join("<br>")}</p>
+              <p>${(pi.alamatCustomer || "").replace(/\n/g, "<br>")}</p>
               ${pi.npwp ? `<p style="margin-top: 3px;">NP/WP: ${pi.npwp}</p>` : ""}
             </div>
             <div class="meta-box">
               <p><span style="font-weight: 600;">INVOICE NO. :</span> ${invoiceNomor}</p>
-              <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(pi.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
+              <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(invoiceDate).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
               <p><span style="font-weight: 600;">CUSTOMER ID :</span> ${pi.nomorPI || ""}</p>
             </div>
           </div>
@@ -1461,7 +1501,7 @@ const handleOpenInvoice = async (surat: SuratMuatInfo) => {
               <div class="ttd-box">
                 <p style="font-weight: 600;">Diorder Oleh:</p>
                 <p>PT. Bukit Agrochemical Baru</p>
-                <div style="height: 35px;"></div>
+                ${orderTTD ? `<img src="${orderTTD.ttdImage}" style="height: 35px; object-fit: contain; display: block; margin: 2px auto;" />` : `<div style="height: 35px;"></div>`}
                 ${orderTTD ? `<p style="font-weight: 700; border-top: 1px solid #000; padding-top: 2px; display: inline-block;">${orderTTD.nama}</p>` : `<p style="font-weight: 700;">_________________</p>`}
                 ${orderTTD ? `<p>${orderTTD.jabatan}</p>` : ""}
               </div>

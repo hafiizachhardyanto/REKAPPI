@@ -61,6 +61,7 @@ interface SuratPengangkutanItem {
   bobotPerUnit: number;
   maxZAK: number;
   fot: string;
+  nomorPI?: string;
 }
 
 interface ExistingSurat {
@@ -356,8 +357,8 @@ export default function SuratPengangkutanPage() {
       snapshot.docs.forEach((docSnap) => {
         const data = docSnap.data();
         const suratItems = data.items || [];
-        suratItems.forEach((item: any) => {
-          const zak = parseFloat(item.pengambilanZAK) || 0;
+        suratItems.forEach((item: { jenisPupuk: string; pengambilanZAK: number | string; bobotPerUnit: number }) => {
+          const zak = parseFloat(String(item.pengambilanZAK)) || 0;
           const bobot = item.bobotPerUnit || 50;
           const kg = zak * bobot;
           totalLoadedKG += kg;
@@ -408,6 +409,7 @@ export default function SuratPengangkutanPage() {
             bobotPerUnit: prod.bobotPerUnit,
             maxZAK: maxZAK,
             fot: prod.fot,
+            nomorPI: selectedPI.nomorPI,
           });
         }
       });
@@ -581,7 +583,7 @@ export default function SuratPengangkutanPage() {
         return sum + zak * item.bobotPerUnit;
       }, 0);
 
-      const suratData: any = {
+      const suratData: Record<string, unknown> = {
         jenisSurat,
         subJenisDO: subJenisDO || null,
         tanggal: formData.tanggal,
@@ -596,6 +598,7 @@ export default function SuratPengangkutanPage() {
           totalKG: (parseFloat(item.pengambilanZAK) || 0) * item.bobotPerUnit,
           sisa: item.sisa,
           fot: item.fot,
+          nomorPI: item.nomorPI || null,
         })),
         totalPengambilanKG: totalPengambilanKG,
         createdBy: user?.nama || "",
@@ -660,7 +663,7 @@ export default function SuratPengangkutanPage() {
 
       await addDoc(collection(db, "suratPengangkutan"), suratData);
 
-      const transaksiData: any = {
+      const transaksiData: Record<string, unknown> = {
         tanggal: formData.tanggal,
         jenis: jenisSurat === "gudangInduk" ? "suratPengangkutanGudangInduk" : "suratPengangkutanDO",
         items: suratData.items,
@@ -722,13 +725,14 @@ export default function SuratPengangkutanPage() {
   const handlePrintPDF = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
+    const isGI = jenisSurat === "gudangInduk";
     const itemsHtml = items
       .map(
         (item, idx) => `
         <tr>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${idx + 1}</td>
-          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${item.nomorSubDO || "-"}</td>
-          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${item.nomorPO || "-"}</td>
+          ${!isGI ? `<td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${item.nomorSubDO || "-"}</td>` : ""}
+          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${isGI ? (selectedPI?.nomorPI || "-") : (item.nomorPO || "-")}</td>
           <td style="padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600;">${item.jenisPupuk || ""}</td>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${item.party || "-"}</td>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${item.pengambilanZAK || "-"} ZAK</td>
@@ -737,9 +741,6 @@ export default function SuratPengangkutanPage() {
       `
       )
       .join("");
-    const piBadge = selectedPI
-      ? `<span style="display: inline-block; background: #dcfce7; padding: 2px 8px; border-radius: 4px; margin-right: 4px; font-size: 10px; font-weight: 600;">${selectedPI.nomorPI}</span>`
-      : '<span style="font-size: 10px; color: #666;">-</span>';
     const recipientBox = jenisSurat === "gudangInduk"
       ? `<div class="recipient-box">
               <p class="recipient-title">Kepada Yth :</p>
@@ -751,7 +752,7 @@ export default function SuratPengangkutanPage() {
               <p class="recipient-title">Kepada Yth :</p>
               <p class="recipient-name">${formData.kepadaNama || ""}</p>
               <p class="recipient-name">${formData.kepadaPerusahaan || ""}</p>
-              <p class="recipient-address">${(formData.kepadaAlamat || "").split("\n").join("<br>")}</p>
+              <p class="recipient-address">${(formData.kepadaAlamat || "").replace(/\n/g, "<br>")}</p>
             </div>`;
     const html = `
       <!DOCTYPE html>
@@ -813,18 +814,13 @@ export default function SuratPengangkutanPage() {
             <p>Dengan Hormat,</p>
             <p>Dengan ini mohon dimuatkan pupuk dengan rincian sebagai berikut :</p>
           </div>
-          ${jenisSurat === "gudangInduk" ? `
-          <div style="margin-bottom: 8px; font-size: 10px;">
-            <span style="font-weight: 600;">Nomor Proforma Invoice : </span>${piBadge}
-          </div>
-          ` : ""}
           <div class="table-section">
             <div class="table-title">DASAR PENGANGKUTAN</div>
             <table class="data-table">
               <thead>
                 <tr>
                   <th style="width: 30px;">NO</th>
-                  <th style="width: 100px;">NOMOR SUB DO</th>
+                  ${!isGI ? `<th style="width: 100px;">NOMOR SUB DO</th>` : ""}
                   <th style="width: 100px;">NOMOR PO</th>
                   <th>JENIS PUPUK</th>
                   <th style="width: 60px;">PARTY</th>
@@ -1238,10 +1234,16 @@ export default function SuratPengangkutanPage() {
                   )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleItemChange(item.id, "nomorSubDO", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`nomorSubDO_${idx}`]} required={subJenisDO === "mandiri"} />
-                  <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleItemChange(item.id, "nomorPO", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`nomorPO_${idx}`]} required={subJenisDO === "mandiri"} />
+                  {jenisSurat !== "gudangInduk" && (
+                    <>
+                      <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleItemChange(item.id, "nomorSubDO", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`nomorSubDO_${idx}`]} required={subJenisDO === "mandiri"} />
+                      <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleItemChange(item.id, "nomorPO", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`nomorPO_${idx}`]} required={subJenisDO === "mandiri"} />
+                    </>
+                  )}
                   <Input label="Jenis Pupuk" type="text" value={item.jenisPupuk} onChange={(e) => handleItemChange(item.id, "jenisPupuk", e.target.value)} placeholder="Otomatis dari PI" error={errors[`jenisPupuk_${idx}`]} required />
-                  <Input label="Party" type="text" value={item.party} onChange={(e) => handleItemChange(item.id, "party", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`party_${idx}`]} required={subJenisDO === "mandiri"} />
+                  {jenisSurat !== "gudangInduk" && (
+                    <Input label="Party" type="text" value={item.party} onChange={(e) => handleItemChange(item.id, "party", e.target.value)} placeholder={subJenisDO === "mandiri" ? "Wajib" : "Opsional"} error={errors[`party_${idx}`]} required={subJenisDO === "mandiri"} />
+                  )}
                   <div>
                     <Input label={`Pengambilan (ZAK)${item.maxZAK > 0 ? ` - Max: ${item.maxZAK}` : ""}`} type="number" value={item.pengambilanZAK} onChange={(e) => handleItemChange(item.id, "pengambilanZAK", e.target.value)} placeholder={item.maxZAK > 0 ? `Max ${item.maxZAK} ZAK` : "Contoh: 100"} />
                     {item.bobotPerUnit > 0 && item.pengambilanZAK && (
