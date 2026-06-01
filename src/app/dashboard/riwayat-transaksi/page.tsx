@@ -649,13 +649,14 @@ export default function RiwayatTransaksiPage() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
+    const isDO = item.jenis === "suratPengangkutanDO";
     const itemsHtml = (item.items || [])
       .map(
         (it, idx) => `
         <tr>
           <td style="text-align: center; padding: 8px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${idx + 1}</td>
-          <td style="text-align: center; padding: 8px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorSubDO || "-"}</td>
-          <td style="text-align: center; padding: 8px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorPO || "-"}</td>
+          ${isDO ? `<td style="text-align: center; padding: 8px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorSubDO || "-"}</td>` : ""}
+          ${isDO ? `<td style="text-align: center; padding: 8px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorPO || "-"}</td>` : ""}
           <td style="padding: 8px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600;">${it.jenisPupuk || ""}</td>
           <td style="text-align: center; padding: 8px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.party || "-"}</td>
           <td style="text-align: center; padding: 8px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.pengambilanZAK || "0"} ZAK</td>
@@ -770,8 +771,8 @@ export default function RiwayatTransaksiPage() {
               <thead>
                 <tr>
                   <th style="width: 30px;">NO</th>
-                  <th style="width: 90px;">NOMOR SUB DO</th>
-                  <th style="width: 90px;">NOMOR PO</th>
+                  ${isDO ? `<th style="width: 90px;">NOMOR SUB DO</th>` : ""}
+                  ${isDO ? `<th style="width: 90px;">NOMOR PO</th>` : ""}
                   <th>JENIS PUPUK</th>
                   <th style="width: 60px;">PARTY</th>
                   <th style="width: 80px;">PENGAMBILAN<br>ZAK</th>
@@ -943,12 +944,16 @@ const jenisOptions = [
       render: (row: UnifiedTransaksi) => (
         <div className="text-sm">
           {row.jenis === "suratPengangkutanGudangInduk" || row.jenis === "suratPengangkutanDO" ? (
-            <div>
-              <p className="font-semibold text-gray-800">{row.items && row.items[0] ? row.items[0].jenisPupuk : "Surat Pengangkutan"}</p>
+            <div className="space-y-1">
+              {(row.items || []).map((it, idx) => (
+                <p key={idx} className="font-semibold text-gray-800">
+                  {it.jenisPupuk} <span className="text-xs font-normal text-gray-500">({it.pengambilanZAK || 0} ZAK / {(it.totalKG || 0).toLocaleString("id-ID")} KG)</span>
+                </p>
+              ))}
               {row.nomorPIList && row.nomorPIList.length > 0 && (
-                <p className="text-xs text-gray-500">PI: {row.nomorPIList.join(", ")}</p>
+                <p className="text-xs text-gray-500 mt-1">PI: {row.nomorPIList.join(", ")}</p>
               )}
-              {getTotalKGForSurat(row) > 0 && <p className="text-xs text-gray-500">{getTotalKGForSurat(row).toLocaleString()} KG</p>}
+              {getTotalKGForSurat(row) > 0 && <p className="text-xs text-gray-500 font-medium">Total: {getTotalKGForSurat(row).toLocaleString("id-ID")} KG</p>}
             </div>
           ) : (
             <span className="font-semibold text-gray-800">{row.namaBarang}</span>
@@ -1181,8 +1186,12 @@ const jenisOptions = [
                     <thead>
                       <tr className="bg-green-50">
                         <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">No</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">Sub DO</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">PO</th>
+                        {selectedItem.jenis === "suratPengangkutanDO" && (
+                          <>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">Sub DO</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">PO</th>
+                          </>
+                        )}
                         <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">Jenis Pupuk</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">Party</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-green-800 uppercase border">ZAK</th>
@@ -1194,8 +1203,12 @@ const jenisOptions = [
                       {(selectedItem.items || []).map((item, idx) => (
                         <tr key={idx} className="border-b">
                           <td className="px-4 py-3 text-sm text-gray-900 border">{idx + 1}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600 border">{item.nomorSubDO || "-"}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600 border">{item.nomorPO || "-"}</td>
+                          {selectedItem.jenis === "suratPengangkutanDO" && (
+                            <>
+                              <td className="px-4 py-3 text-sm text-gray-600 border">{item.nomorSubDO || "-"}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600 border">{item.nomorPO || "-"}</td>
+                            </>
+                          )}
                           <td className="px-4 py-3 text-sm font-medium text-gray-900 border">{item.jenisPupuk}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 border">{item.party || "-"}</td>
                           <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono border">{item.pengambilanZAK || 0}</td>

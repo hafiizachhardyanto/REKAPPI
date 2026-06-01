@@ -503,6 +503,52 @@ export default function RekapProformaInvoicePage() {
     }
   };
 
+  const handleOpenFullInvoice = async (row: ProformaInvoice) => {
+    setSelectedItem(row);
+    setInvoiceSurat(null);
+    setSelectedOrderTTD("");
+    setInvoiceNomor("");
+    setShowRegenerateButton(false);
+    setIsInvoiceModalOpen(true);
+    setIsGeneratingInvoice(true);
+    try {
+      const piRef = doc(db, "proformaInvoice", row.id);
+      const piSnap = await getDoc(piRef);
+      let baseNumber = piSnap.data()?.invoiceBaseNumber;
+      if (!baseNumber) {
+        baseNumber = await getNextInvoiceBaseNumber();
+        await updateDoc(piRef, { invoiceBaseNumber: baseNumber });
+      }
+      const nomor = `BAGB-INV-${baseNumber}`;
+      setInvoiceNomor(nomor);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsGeneratingInvoice(false);
+    }
+  };
+
+  const handleOpenInvoice = async (surat: SuratMuatInfo) => {
+    setInvoiceSurat(surat);
+    setSelectedOrderTTD("");
+    setInvoiceNomor("");
+    setShowRegenerateButton(false);
+    setIsInvoiceModalOpen(true);
+    setIsGeneratingInvoice(true);
+    try {
+      const nomor = await generateInvoiceNumber(surat);
+      setInvoiceNomor(nomor);
+      if (selectedItem) {
+        const status = getStatusPengangkutan(selectedItem);
+        setShowRegenerateButton(status === "complete" && nomor.includes("-S"));
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsGeneratingInvoice(false);
+    }
+  };
+
   const filteredData = data.filter((item) =>
     item.nomorPI?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.namaCustomer?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -1202,142 +1248,56 @@ export default function RekapProformaInvoicePage() {
     printWindow.document.close();
   };
 
-  const handleOpenFullInvoice = async (row: ProformaInvoice) => {
-    setSelectedItem(row);
-    setInvoiceSurat(null);
-    setSelectedOrderTTD("");
-    setInvoiceNomor("");
-    setShowRegenerateButton(false);
-    setIsInvoiceModalOpen(true);
-    setIsGeneratingInvoice(true);
-    try {
-      const piRef = doc(db, "proformaInvoice", row.id);
-      const piSnap = await getDoc(piRef);
-      let baseNumber = piSnap.data()?.invoiceBaseNumber;
-      if (!baseNumber) {
-        baseNumber = await getNextInvoiceBaseNumber();
-        await updateDoc(piRef, { invoiceBaseNumber: baseNumber });
-      }
-      const nomor = `BAGB-INV-${baseNumber}`;
-      setInvoiceNomor(nomor);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsGeneratingInvoice(false);
-    }
-  };
-
-  const handleOpenInvoice = async (surat: SuratMuatInfo) => {
-    setInvoiceSurat(surat);
-    setSelectedOrderTTD("");
-    setInvoiceNomor("");
-    setShowRegenerateButton(false);
-    setIsInvoiceModalOpen(true);
-    setIsGeneratingInvoice(true);
-    try {
-      const nomor = await generateInvoiceNumber(surat);
-      setInvoiceNomor(nomor);
-      if (selectedItem) {
-        const status = getStatusPengangkutan(selectedItem);
-        setShowRegenerateButton(status === "complete" && nomor.includes("-S"));
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsGeneratingInvoice(false);
-    }
-  };
-
   const handlePrintInvoice = () => {
     if (!selectedItem || !invoiceNomor) return;
     const pi = selectedItem;
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
-    const allSuratForDate = getSuratMuatForPI(pi.nomorPI);
-    const lastSurat = allSuratForDate.length > 0 ? allSuratForDate[allSuratForDate.length - 1] : null;
+    const allSuratForPI = getSuratMuatForPI(pi.nomorPI);
+    const lastSurat = allSuratForPI.length > 0 ? allSuratForPI[allSuratForPI.length - 1] : null;
     const invoiceDate = lastSurat ? lastSurat.tanggal : pi.tanggal;
 
-    let invoiceItems: Array<{
-      no: number;
-      namaProduk: string;
-      produsen: string;
-      kemasan: string;
-      fot: string;
-      kuantitas: number;
-      satuan: string;
-      hargaSatuan: number;
-      hargaPerZakDus: number;
-      subTotal: number;
-    }> = [];
-    if (invoiceSurat) {
-      const surat = invoiceSurat;
-      invoiceItems = (surat.items || []).map((it, idx) => {
-        const piProduk = pi.produkItems.find((p) =>
-          p.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase()) ||
-          it.jenisPupuk.toUpperCase().includes(p.namaProduk.toUpperCase())
-        );
-        const hargaSatuan = piProduk?.hargaSatuan || 0;
-        const hargaPerZakDus = piProduk?.hargaPerZakDus || 0;
-        const kemasan = it.bobotPerUnit ? `${it.bobotPerUnit} KG` : "-";
-        const qty = it.pengambilanZAK * it.bobotPerUnit;
-        const subTotal = qty * hargaSatuan;
-        return {
-          no: idx + 1,
-          namaProduk: it.jenisPupuk,
-          produsen: piProduk?.produsen || "",
-          kemasan,
-          fot: it.fot || piProduk?.fot || "",
-          kuantitas: qty,
-          satuan: "KG",
-          hargaSatuan,
-          hargaPerZakDus,
-          subTotal,
-        };
-      });
-    } else {
-      const allSurat = getSuratMuatForPI(pi.nomorPI);
-      const mergedMap: Record<string, {
-        no: number;
-        namaProduk: string;
-        produsen: string;
-        kemasan: string;
-        fot: string;
-        kuantitas: number;
-        satuan: string;
-        hargaSatuan: number;
-        hargaPerZakDus: number;
-        subTotal: number;
-      }> = {};
-      let no = 1;
-      allSurat.forEach((surat) => {
-        (surat.items || []).forEach((it) => {
-          const piProduk = pi.produkItems.find((p) =>
-            p.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase()) ||
-            it.jenisPupuk.toUpperCase().includes(p.namaProduk.toUpperCase())
-          );
-          const key = it.jenisPupuk;
-          if (!mergedMap[key]) {
-            const hargaSatuan = piProduk?.hargaSatuan || 0;
-            const hargaPerZakDus = piProduk?.hargaPerZakDus || 0;
-            mergedMap[key] = {
-              no: no++,
-              namaProduk: it.jenisPupuk,
-              produsen: piProduk?.produsen || "",
-              kemasan: it.bobotPerUnit ? `${it.bobotPerUnit} KG` : "-",
-              fot: it.fot || piProduk?.fot || "",
-              kuantitas: 0,
-              satuan: "KG",
-              hargaSatuan,
-              hargaPerZakDus,
-              subTotal: 0,
-            };
+    const invoiceItems = pi.produkItems.map((produk, idx) => {
+      let loadedQty = 0;
+      if (invoiceSurat) {
+        (invoiceSurat.items || []).forEach((it) => {
+          const match =
+            it.jenisPupuk.toUpperCase().includes(produk.namaProduk.toUpperCase()) ||
+            produk.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase());
+          if (match) {
+            const bobot = it.bobotPerUnit || produk.bobotPerUnit || 50;
+            loadedQty += (it.pengambilanZAK || 0) * bobot;
           }
-          const qty = it.pengambilanZAK * it.bobotPerUnit;
-          mergedMap[key].kuantitas += qty;
-          mergedMap[key].subTotal += qty * mergedMap[key].hargaSatuan;
         });
-      });
-      invoiceItems = Object.values(mergedMap);
-    }
+      } else {
+        allSuratForPI.forEach((surat) => {
+          (surat.items || []).forEach((it) => {
+            const match =
+              it.jenisPupuk.toUpperCase().includes(produk.namaProduk.toUpperCase()) ||
+              produk.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase());
+            if (match) {
+              const bobot = it.bobotPerUnit || produk.bobotPerUnit || 50;
+              loadedQty += (it.pengambilanZAK || 0) * bobot;
+            }
+          });
+        });
+      }
+      const hargaSatuan = produk.hargaSatuan || 0;
+      const hargaPerZakDus = produk.hargaPerZakDus || 0;
+      const kemasan = produk.bobotPerUnit ? `${produk.bobotPerUnit} KG` : "-";
+      const subTotal = loadedQty * hargaSatuan;
+      return {
+        no: idx + 1,
+        namaProduk: produk.namaProduk,
+        produsen: produk.produsen || "",
+        kemasan,
+        fot: produk.fot || "",
+        kuantitas: loadedQty,
+        satuan: "KG",
+        hargaSatuan,
+        hargaPerZakDus,
+        subTotal,
+      };
+    });
 
     const totalSubTotal = invoiceItems.reduce((sum, it) => sum + it.subTotal, 0);
     const dppNilaiLain = 0;
