@@ -20,6 +20,9 @@ interface ProdukItem {
   kuantitas: string;
   satuan: string;
   hargaSatuan: string;
+  hargaPerZakDus: string;
+  bobotPerUnit: number;
+  jumlahIsiBotol: number;
 }
 
 interface TTDData {
@@ -33,7 +36,27 @@ interface CustomerData {
   id: string;
   namaCustomer: string;
   alamatCustomer: string;
+  npwp: string;
   createdAt: any;
+}
+
+interface FormDataState {
+  tanggal: string;
+  nomorPI: string;
+  namaCustomer: string;
+  alamatCustomer: string;
+  npwp: string;
+  metodePembayaran: string;
+  uangMuka: string;
+  includePPN: boolean;
+  ppnNominal: number;
+  ongkosKirim: string;
+  subtotal: number;
+  jumlahTertagih: number;
+  terbilang: string;
+  tanggalJatuhTempo: string;
+  keterangan: string;
+  selectedTTD: string;
 }
 
 export default function InputProformaInvoicePage() {
@@ -51,13 +74,15 @@ export default function InputProformaInvoicePage() {
   const [editingCustomer, setEditingCustomer] = useState<CustomerData | null>(null);
   const [editCustomerName, setEditCustomerName] = useState("");
   const [editCustomerAddress, setEditCustomerAddress] = useState("");
+  const [editCustomerNpwp, setEditCustomerNpwp] = useState("");
   const customerInputRef = useRef<HTMLDivElement>(null);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormDataState>({
     tanggal: new Date().toISOString().split("T")[0],
     nomorPI: "",
     namaCustomer: "",
     alamatCustomer: "",
+    npwp: "",
     metodePembayaran: "Transfer",
     uangMuka: "",
     includePPN: false,
@@ -72,11 +97,11 @@ export default function InputProformaInvoicePage() {
   });
 
   const [produkItems, setProdukItems] = useState<ProdukItem[]>([
-    { id: "1", namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "" },
+    { id: "1", namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "", hargaPerZakDus: "", bobotPerUnit: 50, jumlahIsiBotol: 1 },
   ]);
 
-  const produkItemsRef = useRef(produkItems);
-  const formDataRef = useRef(formData);
+  const produkItemsRef = useRef<ProdukItem[]>(produkItems);
+  const formDataRef = useRef<FormDataState>(formData);
 
   useEffect(() => {
     produkItemsRef.current = produkItems;
@@ -161,17 +186,17 @@ export default function InputProformaInvoicePage() {
     }
   };
 
-  const saveCustomerToHistory = async (nama: string, alamat: string) => {
+  const saveCustomerToHistory = async (nama: string, alamat: string, npwp: string) => {
     if (!nama.trim() || !alamat.trim()) return;
     const normalizedName = nama.trim().toLowerCase();
     const existing = customerList.find((c) => c.namaCustomer.trim().toLowerCase() === normalizedName);
     if (existing) {
-      if (existing.alamatCustomer.trim() !== alamat.trim()) {
+      const updateData: any = { updatedAt: serverTimestamp() };
+      if (existing.alamatCustomer.trim() !== alamat.trim()) updateData.alamatCustomer = alamat.trim();
+      if (npwp.trim() && (!existing.npwp || existing.npwp.trim() !== npwp.trim())) updateData.npwp = npwp.trim();
+      if (Object.keys(updateData).length > 1) {
         try {
-          await updateDoc(doc(db, "customers", existing.id), {
-            alamatCustomer: alamat.trim(),
-            updatedAt: serverTimestamp(),
-          });
+          await updateDoc(doc(db, "customers", existing.id), updateData);
           fetchCustomers();
         } catch (error) {
           console.error(error);
@@ -183,6 +208,7 @@ export default function InputProformaInvoicePage() {
       await addDoc(collection(db, "customers"), {
         namaCustomer: nama.trim(),
         alamatCustomer: alamat.trim(),
+        npwp: npwp.trim() || "",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -206,6 +232,7 @@ export default function InputProformaInvoicePage() {
     setEditingCustomer(customer);
     setEditCustomerName(customer.namaCustomer);
     setEditCustomerAddress(customer.alamatCustomer);
+    setEditCustomerNpwp(customer.npwp || "");
   };
 
   const handleSaveEditCustomer = async () => {
@@ -214,11 +241,13 @@ export default function InputProformaInvoicePage() {
       await updateDoc(doc(db, "customers", editingCustomer.id), {
         namaCustomer: editCustomerName.trim(),
         alamatCustomer: editCustomerAddress.trim(),
+        npwp: editCustomerNpwp.trim(),
         updatedAt: serverTimestamp(),
       });
       setEditingCustomer(null);
       setEditCustomerName("");
       setEditCustomerAddress("");
+      setEditCustomerNpwp("");
       fetchCustomers();
     } catch (error) {
       console.error(error);
@@ -239,6 +268,7 @@ export default function InputProformaInvoicePage() {
       ...prev,
       namaCustomer: customer.namaCustomer,
       alamatCustomer: customer.alamatCustomer,
+      npwp: customer.npwp || "",
     }));
     setShowCustomerDropdown(false);
     if (errors.namaCustomer) {
@@ -369,7 +399,7 @@ export default function InputProformaInvoicePage() {
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setFormData((prev) => ({ ...prev, namaCustomer: value, alamatCustomer: "" }));
+    setFormData((prev) => ({ ...prev, namaCustomer: value, alamatCustomer: "", npwp: "" }));
     setShowCustomerDropdown(true);
     if (errors.namaCustomer) {
       setErrors((prev) => {
@@ -378,6 +408,16 @@ export default function InputProformaInvoicePage() {
         return newErrors;
       });
     }
+  };
+
+  const calculateHargaPerZakDus = (item: ProdukItem): string => {
+    const price = parseFloat(item.hargaSatuan) || 0;
+    if (item.satuan === "KG" || item.satuan === "ZAK") {
+      return String(price * (item.bobotPerUnit || 50));
+    } else if (item.satuan === "BOTOL" || item.satuan === "DUS" || item.satuan === "LITER") {
+      return String(price * (item.jumlahIsiBotol || 1));
+    }
+    return String(price);
   };
 
   const handleProdukChange = (id: string, field: string, value: string) => {
@@ -390,9 +430,24 @@ export default function InputProformaInvoicePage() {
             if (stock) {
               newItem.fot = stock.fot || "";
               newItem.produsen = stock.namaProdusen || "";
+              newItem.bobotPerUnit = stock.bobotPerUnit || 50;
+              newItem.jumlahIsiBotol = (stock as any).jumlahIsiBotol || 1;
             } else {
               newItem.fot = "";
               newItem.produsen = "";
+              newItem.bobotPerUnit = 50;
+              newItem.jumlahIsiBotol = 1;
+            }
+            if (newItem.hargaSatuan) {
+              newItem.hargaPerZakDus = calculateHargaPerZakDus(newItem);
+            }
+          }
+          if (field === "hargaSatuan") {
+            newItem.hargaPerZakDus = calculateHargaPerZakDus(newItem);
+          }
+          if (field === "satuan") {
+            if (newItem.hargaSatuan) {
+              newItem.hargaPerZakDus = calculateHargaPerZakDus(newItem);
             }
           }
           return newItem;
@@ -407,7 +462,7 @@ export default function InputProformaInvoicePage() {
     const newId = Date.now().toString();
     setProdukItems((prev) => [
       ...prev,
-      { id: newId, namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "" },
+      { id: newId, namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "", hargaPerZakDus: "", bobotPerUnit: 50, jumlahIsiBotol: 1 },
     ]);
   };
 
@@ -458,6 +513,7 @@ export default function InputProformaInvoicePage() {
         nomorPI: formData.nomorPI.trim(),
         namaCustomer: formData.namaCustomer.trim(),
         alamatCustomer: formData.alamatCustomer.trim(),
+        npwp: formData.npwp.trim(),
         metodePembayaran: formData.metodePembayaran,
         produkItems: produkItems.map((item) => ({
           namaProduk: item.namaProduk,
@@ -466,6 +522,9 @@ export default function InputProformaInvoicePage() {
           kuantitas: parseFloat(item.kuantitas),
           satuan: item.satuan,
           hargaSatuan: parseFloat(item.hargaSatuan),
+          hargaPerZakDus: parseFloat(item.hargaPerZakDus) || 0,
+          bobotPerUnit: item.bobotPerUnit,
+          jumlahIsiBotol: item.jumlahIsiBotol,
           totalHarga: getItemTotal(item),
         })),
         uangMuka: parseFloat(formData.uangMuka) || 0,
@@ -485,7 +544,7 @@ export default function InputProformaInvoicePage() {
         updatedAt: serverTimestamp(),
       });
 
-      await saveCustomerToHistory(formData.namaCustomer, formData.alamatCustomer);
+      await saveCustomerToHistory(formData.namaCustomer, formData.alamatCustomer, formData.npwp);
 
       setSuccessMessage("Proforma Invoice berhasil disimpan!");
       setFormData({
@@ -493,6 +552,7 @@ export default function InputProformaInvoicePage() {
         nomorPI: "",
         namaCustomer: "",
         alamatCustomer: "",
+        npwp: "",
         metodePembayaran: "Transfer",
         uangMuka: "",
         includePPN: false,
@@ -506,7 +566,7 @@ export default function InputProformaInvoicePage() {
         selectedTTD: "",
       });
       setProdukItems([
-        { id: "1", namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "" },
+        { id: "1", namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "", hargaPerZakDus: "", bobotPerUnit: 50, jumlahIsiBotol: 1 },
       ]);
       generateTanggalJatuhTempo();
       setTimeout(() => setSuccessMessage(""), 5000);
@@ -539,6 +599,7 @@ export default function InputProformaInvoicePage() {
     { value: "ZAK", label: "ZAK" },
     { value: "DUS", label: "DUS" },
     { value: "LITER", label: "LITER" },
+    { value: "BOTOL", label: "BOTOL" },
   ];
 
   const formatRupiah = (num: number) => {
@@ -603,7 +664,7 @@ export default function InputProformaInvoicePage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setFormData((prev) => ({ ...prev, namaCustomer: "", alamatCustomer: "" }));
+                        setFormData((prev) => ({ ...prev, namaCustomer: "", alamatCustomer: "", npwp: "" }));
                         setShowCustomerDropdown(false);
                       }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
@@ -654,6 +715,8 @@ export default function InputProformaInvoicePage() {
                 {errors.alamatCustomer && <p className="mt-1 text-sm text-red-600">{errors.alamatCustomer}</p>}
               </div>
 
+              <Input label="NPWP (Opsional)" type="text" name="npwp" value={formData.npwp} onChange={handleChange} placeholder="Contoh: 123456789012345" />
+
               <div className="flex items-center gap-3">
                 <Button type="button" variant="secondary" size="sm" onClick={() => setIsCustomerModalOpen(true)}>
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -702,6 +765,7 @@ export default function InputProformaInvoicePage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider w-32">Kuantitas</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider w-24">Satuan</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider w-40">Harga Satuan</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider w-40">Harga Per ZAK/DUS</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase tracking-wider w-40">Total Harga</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-green-800 uppercase tracking-wider w-16">Aksi</th>
                   </tr>
@@ -738,6 +802,9 @@ export default function InputProformaInvoicePage() {
                       <td className="px-4 py-3">
                         <input type="text" inputMode="decimal" value={item.hargaSatuan} onChange={(e) => handleProdukChange(item.id, "hargaSatuan", e.target.value)} placeholder="0.00" className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${errors[`harga_${index}`] ? "border-red-500" : "border-gray-300"}`} />
                         {errors[`harga_${index}`] && <p className="mt-1 text-xs text-red-600">{errors[`harga_${index}`]}</p>}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono text-gray-700">
+                        {item.hargaPerZakDus ? formatRupiah(parseFloat(item.hargaPerZakDus)) : "-"}
                       </td>
                       <td className="px-4 py-3 text-sm font-mono font-medium text-gray-900">
                         {formatRupiah(getItemTotal(item))}
@@ -832,6 +899,7 @@ export default function InputProformaInvoicePage() {
               nomorPI: "",
               namaCustomer: "",
               alamatCustomer: "",
+              npwp: "",
               metodePembayaran: "Transfer",
               uangMuka: "",
               includePPN: false,
@@ -844,7 +912,7 @@ export default function InputProformaInvoicePage() {
               keterangan: "",
               selectedTTD: "",
             });
-            setProdukItems([{ id: "1", namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "" }]);
+            setProdukItems([{ id: "1", namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "", hargaPerZakDus: "", bobotPerUnit: 50, jumlahIsiBotol: 1 }]);
             generateTanggalJatuhTempo();
             setErrors({});
           }}>
@@ -877,6 +945,7 @@ export default function InputProformaInvoicePage() {
                 <tr className="bg-green-50">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase">Nama Customer</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase">Alamat</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase">NPWP</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-green-800 uppercase w-32">Aksi</th>
                 </tr>
               </thead>
@@ -895,6 +964,13 @@ export default function InputProformaInvoicePage() {
                         <input type="text" value={editCustomerAddress} onChange={(e) => setEditCustomerAddress(e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
                       ) : (
                         customer.alamatCustomer
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {editingCustomer?.id === customer.id ? (
+                        <input type="text" value={editCustomerNpwp} onChange={(e) => setEditCustomerNpwp(e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                      ) : (
+                        customer.npwp || "-"
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -935,7 +1011,7 @@ export default function InputProformaInvoicePage() {
                 ))}
                 {filteredCustomers.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-8 text-center text-sm text-gray-500">
+                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-500">
                       Belum ada data customer
                     </td>
                   </tr>

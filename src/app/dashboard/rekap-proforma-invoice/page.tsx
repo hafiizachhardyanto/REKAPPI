@@ -32,6 +32,9 @@ interface ProdukItem {
   kuantitas: number;
   satuan: string;
   hargaSatuan: number;
+  hargaPerZakDus: number;
+  bobotPerUnit: number;
+  jumlahIsiBotol: number;
   totalHarga: number;
 }
 
@@ -65,6 +68,7 @@ interface ProformaInvoice {
   nomorPI: string;
   namaCustomer: string;
   alamatCustomer: string;
+  npwp: string;
   metodePembayaran: string;
   produkItems: ProdukItem[];
   uangMuka: number;
@@ -112,6 +116,13 @@ interface ExistingSurat {
   nomorSeri: string;
 }
 
+interface TTDData {
+  id: string;
+  nama: string;
+  jabatan: string;
+  ttdImage: string;
+}
+
 const getRomanMonth = (month: number) => {
   const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
   return romans[month - 1] || "I";
@@ -149,10 +160,23 @@ export default function RekapProformaInvoicePage() {
   const [stockList, setStockList] = useState<StockItem[]>([]);
   const [existingSuratList, setExistingSuratList] = useState<ExistingSurat[]>([]);
   const [nomorSeriError, setNomorSeriError] = useState("");
+  const [ttdList, setTtdList] = useState<TTDData[]>([]);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [invoiceSurat, setInvoiceSurat] = useState<SuratMuatInfo | null>(null);
+  const [selectedOrderTTD, setSelectedOrderTTD] = useState("");
 
   const [editForm, setEditForm] = useState({
-    sisaPengambilanKG: "",
-    statusPengangkutan: "pending",
+    tanggal: "",
+    nomorPI: "",
+    namaCustomer: "",
+    alamatCustomer: "",
+    npwp: "",
+    metodePembayaran: "Transfer",
+    uangMuka: "",
+    includePPN: false,
+    ongkosKirim: "",
+    keterangan: "",
+    produkItems: [] as ProdukItem[],
   });
 
   const [editSuratForm, setEditSuratForm] = useState({
@@ -169,6 +193,7 @@ export default function RekapProformaInvoicePage() {
     fetchSuratMuat();
     fetchStockGudang();
     fetchExistingSurat();
+    fetchTTD();
   }, []);
 
   const fetchData = async () => {
@@ -217,6 +242,17 @@ export default function RekapProformaInvoicePage() {
         nomorSeri: doc.data().nomorSeri || "",
       } as ExistingSurat));
       setExistingSuratList(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const fetchTTD = async () => {
+    try {
+      const q = query(collection(db, "ttd"), orderBy("nama", "asc"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TTDData));
+      setTtdList(data);
     } catch (error) {
       console.error(error);
     }
@@ -348,8 +384,17 @@ export default function RekapProformaInvoicePage() {
   const handleEdit = (item: ProformaInvoice) => {
     setSelectedItem(item);
     setEditForm({
-      sisaPengambilanKG: item.sisaPengambilanKG !== undefined ? String(item.sisaPengambilanKG) : "",
-      statusPengangkutan: item.statusPengangkutan || "pending",
+      tanggal: item.tanggal,
+      nomorPI: item.nomorPI,
+      namaCustomer: item.namaCustomer,
+      alamatCustomer: item.alamatCustomer,
+      npwp: item.npwp || "",
+      metodePembayaran: item.metodePembayaran,
+      uangMuka: String(item.uangMuka || ""),
+      includePPN: item.includePPN,
+      ongkosKirim: String(item.ongkosKirim || ""),
+      keterangan: item.keterangan || "",
+      produkItems: (item.produkItems || []).map((p) => ({ ...p })),
     });
     setIsEditModalOpen(true);
   };
@@ -381,14 +426,40 @@ export default function RekapProformaInvoicePage() {
     setIsEditSuratModalOpen(true);
   };
 
-  const handleUpdateStatus = async (e: React.FormEvent) => {
+  const handleUpdateFull = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
     setIsSubmitting(true);
     try {
+      let subtotal = 0;
+      const updatedProdukItems = editForm.produkItems.map((p) => {
+        const qty = p.kuantitas || 0;
+        const price = p.hargaSatuan || 0;
+        const total = qty * price;
+        subtotal += total;
+        return { ...p, totalHarga: total };
+      });
+      const uangMuka = parseFloat(editForm.uangMuka) || 0;
+      const ongkosKirim = parseFloat(editForm.ongkosKirim) || 0;
+      let ppn = 0;
+      if (editForm.includePPN) ppn = subtotal * 0.11;
+      const jumlahTertagih = subtotal - uangMuka + ppn + ongkosKirim;
+
       await updateDoc(doc(db, "proformaInvoice", selectedItem.id), {
-        sisaPengambilanKG: parseFloat(editForm.sisaPengambilanKG) || 0,
-        statusPengangkutan: editForm.statusPengangkutan,
+        tanggal: editForm.tanggal,
+        nomorPI: editForm.nomorPI.trim(),
+        namaCustomer: editForm.namaCustomer.trim(),
+        alamatCustomer: editForm.alamatCustomer.trim(),
+        npwp: editForm.npwp.trim(),
+        metodePembayaran: editForm.metodePembayaran,
+        produkItems: updatedProdukItems,
+        uangMuka: uangMuka,
+        includePPN: editForm.includePPN,
+        ppnNominal: ppn,
+        ongkosKirim: ongkosKirim,
+        subtotal: subtotal,
+        jumlahTertagih: jumlahTertagih,
+        keterangan: editForm.keterangan.trim(),
         updatedAt: serverTimestamp(),
       });
       setIsEditModalOpen(false);
@@ -594,6 +665,7 @@ export default function RekapProformaInvoicePage() {
       "Nomor PI": item.nomorPI,
       "Nama Customer": item.namaCustomer,
       "Alamat": item.alamatCustomer,
+      "NPWP": item.npwp || "",
       "Metode Pembayaran": item.metodePembayaran,
       "Subtotal": item.subtotal,
       "PPN 11%": item.includePPN ? item.ppnNominal : 0,
@@ -735,6 +807,13 @@ export default function RekapProformaInvoicePage() {
                     <span class="meta-colon">:</span>
                     <span class="meta-value">${item.metodePembayaran || ""}</span>
                   </div>
+                  ${item.npwp ? `
+                  <div class="meta-row">
+                    <span class="meta-label">NPWP</span>
+                    <span class="meta-colon">:</span>
+                    <span class="meta-value">${item.npwp}</span>
+                  </div>
+                  ` : ""}
                 </div>
               </div>
             </div>
@@ -976,6 +1055,280 @@ export default function RekapProformaInvoicePage() {
     printWindow.document.close();
   };
 
+  const handleOpenInvoice = (surat: SuratMuatInfo) => {
+    setInvoiceSurat(surat);
+    setSelectedOrderTTD("");
+    setIsInvoiceModalOpen(true);
+  };
+
+  const handlePrintInvoice = () => {
+    if (!invoiceSurat || !selectedItem) return;
+    const surat = invoiceSurat;
+    const pi = selectedItem;
+
+    const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
+
+    const invoiceItems = (surat.items || []).map((it, idx) => {
+      const piProduk = pi.produkItems.find((p) =>
+        p.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase()) ||
+        it.jenisPupuk.toUpperCase().includes(p.namaProduk.toUpperCase())
+      );
+      const hargaSatuan = piProduk?.hargaSatuan || 0;
+      const hargaPerZakDus = piProduk?.hargaPerZakDus || 0;
+      const kemasan = it.bobotPerUnit ? `${it.bobotPerUnit} KG` : "-";
+      const qty = it.pengambilanZAK * it.bobotPerUnit;
+      const subTotal = qty * hargaSatuan;
+      return {
+        no: idx + 1,
+        namaProduk: it.jenisPupuk,
+        produsen: piProduk?.produsen || "",
+        kemasan,
+        fot: it.fot || piProduk?.fot || "",
+        kuantitas: qty,
+        satuan: "KG",
+        hargaSatuan,
+        hargaPerZakDus,
+        subTotal,
+      };
+    });
+
+    const totalSubTotal = invoiceItems.reduce((sum, it) => sum + it.subTotal, 0);
+    const dppNilaiLain = 0;
+    const ongkosKirim = pi.ongkosKirim || 0;
+    const ppn = pi.includePPN ? totalSubTotal * 0.11 : 0;
+    const totalPembayaran = totalSubTotal + dppNilaiLain + ongkosKirim + ppn;
+
+    const itemsHtml = invoiceItems.map((it) => `
+      <tr>
+        <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.no}</td>
+        <td style="padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600;">${it.namaProduk}</td>
+        <td style="padding: 6px 8px; font-size: 9px; border: 1px solid #000; vertical-align: top;">${it.produsen}</td>
+        <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.kemasan}</td>
+        <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.fot}</td>
+        <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.kuantitas.toLocaleString("id-ID")} ${it.satuan}</td>
+        <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${formatRupiah(it.hargaSatuan)}</td>
+        <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${formatRupiah(it.hargaPerZakDus)}</td>
+        <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600;">${formatRupiah(it.subTotal)}</td>
+      </tr>
+    `).join("");
+
+    const emptyRows = Array.from({ length: Math.max(0, 8 - invoiceItems.length) }, (_, i) => `
+      <tr>
+        <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${invoiceItems.length + i + 1}</td>
+        <td style="padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
+        <td style="padding: 6px 8px; font-size: 9px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
+        <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
+        <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
+        <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
+        <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
+        <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
+        <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
+      </tr>
+    `).join("");
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice ${surat.nomorSeri}</title>
+        <style>
+          @page { size: A4; margin: 10mm 12mm 10mm 12mm; }
+          @media print { body { margin: 0; padding: 0; } .no-print { display: none !important; } }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1.4; color: #000; }
+          .page { width: 176mm; margin: 0 auto; position: relative; min-height: 257mm; }
+          .header-img { width: 100%; display: block; margin-bottom: 0; }
+          .title-bar { text-align: center; background: #15803d; color: white; padding: 6px 0; margin: 6px 0 10px 0; font-weight: bold; font-size: 13px; letter-spacing: 4px; }
+          .info-section { margin-bottom: 10px; }
+          .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 10px; }
+          .info-label { font-weight: 600; }
+          .customer-area { margin-bottom: 10px; font-size: 10px; }
+          .customer-area p { margin-bottom: 2px; }
+          .customer-title { font-weight: 700; margin-bottom: 4px; }
+          .meta-box { text-align: right; font-size: 10px; margin-bottom: 10px; }
+          .meta-box p { margin-bottom: 2px; }
+          .data-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+          .data-table th { background: #f0fdf4; font-size: 9px; padding: 5px 3px; border: 1px solid #000; font-weight: 700; text-align: center; }
+          .data-table td { border: 1px solid #000; padding: 5px 3px; vertical-align: top; }
+          .summary-table { width: 100%; border-collapse: collapse; margin-top: 0; border: 1px solid #000; border-top: none; }
+          .summary-table td { border: 1px solid #000; padding: 4px 8px; font-size: 10px; }
+          .summary-table .label { text-align: left; font-weight: 600; }
+          .summary-table .value { text-align: right; font-family: monospace; }
+          .total-pembayaran { font-weight: 700; font-size: 11px; }
+          .terbilang-box { border: 1px solid #000; border-top: none; padding: 6px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+          .terbilang-label { font-size: 9px; font-weight: 600; margin-bottom: 2px; }
+          .bank-area { border: 1px solid #000; padding: 8px 10px; margin-top: 10px; font-size: 9px; width: 55%; }
+          .bank-area p { margin-bottom: 2px; }
+          .bank-title { font-weight: 700; margin-bottom: 4px; }
+          .signature-section { display: flex; justify-content: space-between; margin-top: 20px; }
+          .signature-box { width: 45%; text-align: center; font-size: 10px; }
+          .signature-box p { margin-bottom: 2px; }
+          .signature-title { margin-bottom: 40px; }
+          .signature-img { height: 45px; object-fit: contain; margin: 0 auto; display: block; }
+          .signature-name { font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block; }
+          .footer-img { width: 100%; display: block; margin-top: 10px; }
+          .print-btn { background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 10px; }
+          .print-bar { text-align: center; padding: 10px; background: #f3f4f6; position: sticky; top: 0; z-index: 100; }
+          @media print { .print-bar { display: none !important; } }
+        </style>
+      </head>
+      <body>
+        <div class="print-bar no-print">
+          <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+        </div>
+        <div class="page">
+          <img src="/Picture3.png" alt="Header" class="header-img" onerror="this.style.display='none'" />
+          <div class="title-bar">I N V O I C E</div>
+          <div class="info-section">
+            <div class="info-row">
+              <div class="customer-area">
+                <p class="customer-title">Kepada Yth. :</p>
+                <p style="font-weight: 700;">${pi.namaCustomer || ""}</p>
+                <p>${(pi.alamatCustomer || "").split("\n").join("<br>")}</p>
+                ${pi.npwp ? `<p style="margin-top: 4px;">NP/WP: ${pi.npwp}</p>` : ""}
+              </div>
+              <div class="meta-box">
+                <p><span style="font-weight: 600;">INVOICE NO. :</span> ${surat.nomorSeri}</p>
+                <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(surat.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
+                <p><span style="font-weight: 600;">CUSTOMER ID :</span> ${pi.nomorPI || ""}</p>
+              </div>
+            </div>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 28px;">NO</th>
+                <th style="text-align: left; padding-left: 8px;">NAMA PRODUK</th>
+                <th style="text-align: left; padding-left: 8px;">PRODUSEN</th>
+                <th style="width: 60px;">KEMASAN</th>
+                <th style="width: 50px;">FOT</th>
+                <th style="width: 80px;">KUANTITAS</th>
+                <th style="width: 90px;">HARGA SATUAN<br>PER KG</th>
+                <th style="width: 90px;">PER ZAK/DUS</th>
+                <th style="width: 100px;">SUB TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+              ${emptyRows}
+            </tbody>
+          </table>
+          <table class="summary-table">
+            <tr>
+              <td style="border: none; width: 60%;"></td>
+              <td class="label" style="width: 20%;">TOTAL</td>
+              <td class="value" style="width: 20%;">${formatRupiah(totalSubTotal)}</td>
+            </tr>
+            <tr>
+              <td style="border: none;"></td>
+              <td class="label">DPP NILAI LAIN-LAIN</td>
+              <td class="value">${formatRupiah(dppNilaiLain)}</td>
+            </tr>
+            <tr>
+              <td style="border: none;"></td>
+              <td class="label">ONGKOS KIRIM</td>
+              <td class="value">${ongkosKirim > 0 ? formatRupiah(ongkosKirim) : "Rp -"}</td>
+            </tr>
+            <tr>
+              <td style="border: none;"></td>
+              <td class="label">PPN</td>
+              <td class="value">${ppn > 0 ? formatRupiah(ppn) : "Rp -"}</td>
+            </tr>
+            <tr>
+              <td style="border: none;"></td>
+              <td class="label">SUB TOTAL</td>
+              <td class="value">${formatRupiah(totalSubTotal + ppn)}</td>
+            </tr>
+            <tr>
+              <td style="border: none;"></td>
+              <td class="label total-pembayaran">TOTAL PEMBAYARAN :</td>
+              <td class="value total-pembayaran">${formatRupiah(totalPembayaran)}</td>
+            </tr>
+          </table>
+          <div class="terbilang-box">
+            <div class="terbilang-label">TERBILANG :</div>
+            <div>${numberToWords(Math.round(totalPembayaran))}</div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+            <div class="bank-area">
+              <p class="bank-title">Pembayaran PT. Bukit Agrochemical Baru</p>
+              <p>Bank BRI Cabang Lamandau- Kalimantan Tengah</p>
+              <p>No. Rek : 2232-01000-879-56</p>
+            </div>
+            <div style="width: 40%; text-align: center; font-size: 10px;">
+              <p style="margin-bottom: 40px;">Hormat kami,<br>PT.Bukit Agrochemical Baru</p>
+              <img src="/Picture4.png" alt="TTD" style="height: 45px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />
+              <p style="font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">Sri Setyo Wibowo</p>
+              <p>Manager Keuangan</p>
+            </div>
+          </div>
+          <div class="signature-section">
+            <div class="signature-box">
+              <p class="signature-title">Diorder Oleh :<br>PT Bukit Agrochemical Baru</p>
+              ${orderTTD ? `<img src="${orderTTD.ttdImage}" alt="TTD" class="signature-img" onerror="this.style.display='none'" />` : `<div style="height: 45px;"></div>`}
+              ${orderTTD ? `<p class="signature-name">${orderTTD.nama}</p>` : `<p class="signature-name">_________________</p>`}
+              ${orderTTD ? `<p>${orderTTD.jabatan}</p>` : ""}
+            </div>
+          </div>
+          <img src="/Picture1.png" alt="Footer" class="footer-img" onerror="this.style.display='none'" />
+        </div>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setIsInvoiceModalOpen(false);
+  };
+
+  const numberToWords = (num: number): string => {
+    if (num === 0) return "NOL RUPIAH";
+    const ones = ["", "SATU", "DUA", "TIGA", "EMPAT", "LIMA", "ENAM", "TUJUH", "DELAPAN", "SEMBILAN"];
+    const teens = ["SEPULUH", "SEBELAS", "DUA BELAS", "TIGA BELAS", "EMPAT BELAS", "LIMA BELAS", "ENAM BELAS", "TUJUH BELAS", "DELAPAN BELAS", "SEMBILAN BELAS"];
+    const tens = ["", "", "DUA PULUH", "TIGA PULUH", "EMPAT PULUH", "LIMA PULUH", "ENAM PULUH", "TUJUH PULUH", "DELAPAN PULUH", "SEMBILAN PULUH"];
+    const thousands = ["", "RIBU", "JUTA", "MILIAR", "TRILIUN"];
+
+    const convertThreeDigits = (n: number): string => {
+      let result = "";
+      const hundreds = Math.floor(n / 100);
+      const remainder = n % 100;
+      if (hundreds > 0) {
+        if (hundreds === 1) result += "SERATUS ";
+        else result += ones[hundreds] + " RATUS ";
+      }
+      if (remainder > 0) {
+        if (remainder < 10) result += ones[remainder] + " ";
+        else if (remainder < 20) result += teens[remainder - 10] + " ";
+        else {
+          const ten = Math.floor(remainder / 10);
+          const one = remainder % 10;
+          result += tens[ten] + " ";
+          if (one > 0) result += ones[one] + " ";
+        }
+      }
+      return result.trim();
+    };
+
+    if (num < 0) return "MINUS " + numberToWords(-num);
+    let result = "";
+    let i = 0;
+    let tempNum = num;
+    while (tempNum > 0) {
+      const chunk = tempNum % 1000;
+      if (chunk > 0) {
+        let chunkWords = convertThreeDigits(chunk);
+        if (i === 1 && chunk === 1) chunkWords = "SERIBU";
+        else if (i > 0) chunkWords += " " + thousands[i];
+        result = chunkWords + " " + result;
+      }
+      tempNum = Math.floor(tempNum / 1000);
+      i++;
+    }
+    return result.trim() + " RUPIAH";
+  };
+
   const columns = [
     {
       key: "tanggal",
@@ -1066,7 +1419,7 @@ export default function RekapProformaInvoicePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </button>
-          <button onClick={(e) => { e.stopPropagation(); handleEdit(row); }} className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Edit Status">
+          <button onClick={(e) => { e.stopPropagation(); handleEdit(row); }} className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Edit">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
@@ -1127,6 +1480,30 @@ export default function RekapProformaInvoicePage() {
     checkNomorSeriExists(value, selectedSurat?.nomorSeri);
   };
 
+  const handleEditProdukChange = (index: number, field: string, value: string) => {
+    setEditForm((prev) => {
+      const newItems = [...prev.produkItems];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, produkItems: newItems };
+    });
+  };
+
+  const addEditProdukItem = () => {
+    setEditForm((prev) => ({
+      ...prev,
+      produkItems: [...prev.produkItems, { namaProduk: "", fot: "", produsen: "", kuantitas: 0, satuan: "KG", hargaSatuan: 0, hargaPerZakDus: 0, bobotPerUnit: 50, jumlahIsiBotol: 1, totalHarga: 0 }],
+    }));
+  };
+
+  const removeEditProdukItem = (index: number) => {
+    if (editForm.produkItems.length > 1) {
+      setEditForm((prev) => ({
+        ...prev,
+        produkItems: prev.produkItems.filter((_, i) => i !== index),
+      }));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Header title="Rekap Proforma Invoice" subtitle="Kelola dan lihat riwayat proforma invoice beserta status pengangkutan" />
@@ -1184,6 +1561,7 @@ export default function RekapProformaInvoicePage() {
                 <p className="text-xs text-gray-500 uppercase tracking-wide">Customer</p>
                 <p className="font-semibold text-gray-800">{selectedItem.namaCustomer}</p>
                 <p className="text-sm text-gray-600 mt-1">{selectedItem.alamatCustomer}</p>
+                {selectedItem.npwp && <p className="text-sm text-gray-600 mt-1">NPWP: {selectedItem.npwp}</p>}
               </div>
               <div className="p-4 bg-gray-50 rounded-xl">
                 <p className="text-xs text-gray-500 uppercase tracking-wide">Metode Pembayaran</p>
@@ -1228,7 +1606,7 @@ export default function RekapProformaInvoicePage() {
                       <th className="px-4 py-3 text-right text-xs font-semibold text-green-800 uppercase border">Total KG</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">No. Polisi</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">Driver</th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-green-800 uppercase border">Aksi</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-green-800 uppercase border" colSpan={4}>Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1248,24 +1626,33 @@ export default function RekapProformaInvoicePage() {
                         <td className="px-4 py-3 text-sm font-bold text-gray-900 text-right font-mono border">{surat.totalKG.toLocaleString()}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 border">{surat.nomorPolisi}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 border">{surat.driverUnit}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 border">
-                          <div className="flex items-center gap-2 justify-center">
-                            <button onClick={() => handlePrintSuratPDF(surat)} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors" title="Print Surat">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                              </svg>
-                            </button>
-                            <button onClick={() => handleEditSurat(surat)} className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Edit Surat">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button onClick={() => handleDeleteSurat(surat)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Hapus Surat">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
+                        <td className="px-2 py-3 text-sm text-gray-600 border">
+                          <button onClick={() => handlePrintSuratPDF(surat)} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors" title="Print Surat">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                          </button>
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 border">
+                          <button onClick={() => handleEditSurat(surat)} className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Edit Surat">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 border">
+                          <button onClick={() => handleDeleteSurat(surat)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Hapus Surat">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </td>
+                        <td className="px-2 py-3 text-sm text-gray-600 border">
+                          <button onClick={() => handleOpenInvoice(surat)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Invoice">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1283,6 +1670,7 @@ export default function RekapProformaInvoicePage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase">Produsen</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-green-800 uppercase">Kuantitas</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-green-800 uppercase">Harga</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-green-800 uppercase">Harga/ZAK</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-green-800 uppercase">Total</th>
                   </tr>
                 </thead>
@@ -1295,6 +1683,7 @@ export default function RekapProformaInvoicePage() {
                       <td className="px-4 py-3 text-sm text-gray-600">{p.produsen || "-"}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">{p.kuantitas?.toLocaleString("id-ID")} {p.satuan}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">{formatRupiah(p.hargaSatuan)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">{formatRupiah(p.hargaPerZakDus)}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right font-mono">{formatRupiah(p.totalHarga)}</td>
                     </tr>
                   ))}
@@ -1348,32 +1737,98 @@ export default function RekapProformaInvoicePage() {
         )}
       </Modal>
 
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Status Pengangkutan" size="md" footer={
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Proforma Invoice" size="lg" footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Batal</Button>
-          <Button variant="primary" onClick={handleUpdateStatus} isLoading={isSubmitting}>Simpan</Button>
+          <Button variant="primary" onClick={handleUpdateFull} isLoading={isSubmitting}>Simpan Perubahan</Button>
         </div>
       }>
-        <form onSubmit={handleUpdateStatus} className="space-y-6">
-          <div className="grid grid-cols-1 gap-6">
-            <Input label="Sisa Pengambilan (KG)" type="number" value={editForm.sisaPengambilanKG} onChange={(e) => setEditForm((prev) => ({ ...prev, sisaPengambilanKG: e.target.value }))} placeholder="0" />
-            <Select label="Status Pengangkutan" value={editForm.statusPengangkutan} onChange={(e) => setEditForm((prev) => ({ ...prev, statusPengangkutan: e.target.value }))} options={[
-              { value: "pending", label: "Belum Dimuat" },
-              { value: "partial", label: "Sebagian Dimuat" },
-              { value: "complete", label: "Selesai Dimuat" },
-            ]} />
-          </div>
-          {selectedItem && (
-            <div className="p-4 bg-gray-50 rounded-xl">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Informasi Saat Ini</p>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <p><span className="text-gray-500">Total Dipesan:</span> <span className="font-medium">{getTotalOrdered(selectedItem).toLocaleString()} KG</span></p>
-                <p><span className="text-gray-500">Sudah Dimuat:</span> <span className="font-medium">{getTotalLoaded(selectedItem.nomorPI).toLocaleString()} KG</span></p>
-                <p><span className="text-gray-500">Sisa:</span> <span className="font-medium">{Math.max(0, getTotalOrdered(selectedItem) - getTotalLoaded(selectedItem.nomorPI)).toLocaleString()} KG</span></p>
-                <p><span className="text-gray-500">Status:</span> <span className="font-medium">{getStatusBadge(getStatusPengangkutan(selectedItem)).label}</span></p>
-              </div>
+        <form onSubmit={handleUpdateFull} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input label="Tanggal" type="date" value={editForm.tanggal} onChange={(e) => setEditForm((prev) => ({ ...prev, tanggal: e.target.value }))} required />
+            <Input label="Nomor PI" type="text" value={editForm.nomorPI} onChange={(e) => setEditForm((prev) => ({ ...prev, nomorPI: e.target.value }))} required />
+            <Input label="Nama Customer" type="text" value={editForm.namaCustomer} onChange={(e) => setEditForm((prev) => ({ ...prev, namaCustomer: e.target.value }))} required />
+            <Input label="Alamat Customer" type="text" value={editForm.alamatCustomer} onChange={(e) => setEditForm((prev) => ({ ...prev, alamatCustomer: e.target.value }))} required />
+            <Input label="NPWP" type="text" value={editForm.npwp} onChange={(e) => setEditForm((prev) => ({ ...prev, npwp: e.target.value }))} />
+            <Select label="Metode Pembayaran" value={editForm.metodePembayaran} onChange={(e) => setEditForm((prev) => ({ ...prev, metodePembayaran: e.target.value }))} options={[{ value: "Transfer", label: "Transfer" }, { value: "Cash", label: "Cash" }]} required />
+            <Input label="Uang Muka" type="text" value={editForm.uangMuka} onChange={(e) => setEditForm((prev) => ({ ...prev, uangMuka: e.target.value }))} />
+            <div className="flex items-center gap-3">
+              <input type="checkbox" id="editIncludePPN" checked={editForm.includePPN} onChange={(e) => setEditForm((prev) => ({ ...prev, includePPN: e.target.checked }))} className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500" />
+              <label htmlFor="editIncludePPN" className="text-sm font-medium text-gray-700">Include PPN 11%</label>
             </div>
-          )}
+            <Input label="Ongkos Kirim" type="text" value={editForm.ongkosKirim} onChange={(e) => setEditForm((prev) => ({ ...prev, ongkosKirim: e.target.value }))} />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Keterangan</label>
+              <textarea value={editForm.keterangan} onChange={(e) => setEditForm((prev) => ({ ...prev, keterangan: e.target.value }))} rows={3} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white resize-none" />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <h4 className="text-sm font-semibold text-gray-700">Daftar Produk</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-green-50">
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-green-800 uppercase">No</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-green-800 uppercase">Nama Produk</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-green-800 uppercase">FOT</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-green-800 uppercase">Produsen</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-green-800 uppercase">Kuantitas</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-green-800 uppercase">Satuan</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-green-800 uppercase">Harga Satuan</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-green-800 uppercase">Harga/ZAK</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-green-800 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {editForm.produkItems.map((item, index) => (
+                    <tr key={index}>
+                      <td className="px-3 py-2 text-sm text-gray-900">{index + 1}</td>
+                      <td className="px-3 py-2">
+                        <input type="text" value={item.namaProduk} onChange={(e) => handleEditProdukChange(index, "namaProduk", e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="text" value={item.fot || ""} onChange={(e) => handleEditProdukChange(index, "fot", e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="text" value={item.produsen || ""} onChange={(e) => handleEditProdukChange(index, "produsen", e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="text" inputMode="decimal" value={String(item.kuantitas)} onChange={(e) => handleEditProdukChange(index, "kuantitas", e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <select value={item.satuan} onChange={(e) => handleEditProdukChange(index, "satuan", e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm">
+                          <option value="KG">KG</option>
+                          <option value="ZAK">ZAK</option>
+                          <option value="DUS">DUS</option>
+                          <option value="LITER">LITER</option>
+                          <option value="BOTOL">BOTOL</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="text" inputMode="decimal" value={String(item.hargaSatuan)} onChange={(e) => handleEditProdukChange(index, "hargaSatuan", e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                      </td>
+                      <td className="px-3 py-2 text-sm font-mono text-gray-700">
+                        {formatRupiah(item.hargaPerZakDus || 0)}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <button type="button" onClick={() => removeEditProdukItem(index)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors" disabled={editForm.produkItems.length === 1}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={addEditProdukItem}>
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Tambah Produk
+            </Button>
+          </div>
         </form>
       </Modal>
 
@@ -1439,6 +1894,51 @@ export default function RekapProformaInvoicePage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={isInvoiceModalOpen} onClose={() => setIsInvoiceModalOpen(false)} title="Print Invoice" size="md" footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={() => setIsInvoiceModalOpen(false)}>Batal</Button>
+          <Button variant="primary" onClick={handlePrintInvoice} disabled={!selectedOrderTTD}>Print Invoice</Button>
+        </div>
+      }>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Pilih TTD untuk bagian <strong>Diorder Oleh</strong>:</p>
+          <Select
+            label="Pilih TTD"
+            value={selectedOrderTTD}
+            onChange={(e) => setSelectedOrderTTD(e.target.value)}
+            options={[
+              { value: "", label: "Pilih tanda tangan..." },
+              ...ttdList.map((ttd) => ({
+                value: ttd.id,
+                label: `${ttd.nama} - ${ttd.jabatan}`,
+              })),
+            ]}
+          />
+          {selectedOrderTTD && (
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center gap-4">
+              {(() => {
+                const ttd = ttdList.find((t) => t.id === selectedOrderTTD);
+                if (!ttd) return null;
+                return (
+                  <>
+                    <img src={ttd.ttdImage} alt="TTD" className="h-16 object-contain bg-white rounded-lg border border-gray-200" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{ttd.nama}</p>
+                      <p className="text-xs text-gray-500">{ttd.jabatan}</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm text-blue-700">
+            <p>Invoice akan menggunakan:</p>
+            <p>Header: Picture3.png | Footer: Picture1.png</p>
+            <p>Hormat Kami: Sri Setyo Wibowo (Picture4.png)</p>
+          </div>
+        </div>
       </Modal>
     </div>
   );
