@@ -412,12 +412,7 @@ export default function InputProformaInvoicePage() {
 
   const calculateHargaPerZakDus = (item: ProdukItem): string => {
     const price = parseFloat(item.hargaSatuan) || 0;
-    if (item.satuan === "KG" || item.satuan === "ZAK") {
-      return String(price * (item.bobotPerUnit || 50));
-    } else if (item.satuan === "BOTOL" || item.satuan === "DUS" || item.satuan === "LITER") {
-      return String(price * (item.jumlahIsiBotol || 1));
-    }
-    return String(price);
+    return String(price * (item.bobotPerUnit || 1));
   };
 
   const handleProdukChange = (id: string, field: string, value: string) => {
