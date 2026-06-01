@@ -1171,7 +1171,32 @@ export default function RekapProformaInvoicePage() {
     printWindow.document.close();
   };
 
-  const handleOpenInvoice = async (surat: SuratMuatInfo) => {
+  const handleOpenFullInvoice = async (row: ProformaInvoice) => {
+  setSelectedItem(row);
+  setInvoiceSurat(null);
+  setSelectedOrderTTD("");
+  setInvoiceNomor("");
+  setShowRegenerateButton(false);
+  setIsInvoiceModalOpen(true);
+  setIsGeneratingInvoice(true);
+  try {
+    const piRef = doc(db, "proformaInvoice", row.id);
+    const piSnap = await getDoc(piRef);
+    let baseNumber = piSnap.data()?.invoiceBaseNumber;
+    if (!baseNumber) {
+      baseNumber = await getNextInvoiceBaseNumber();
+      await updateDoc(piRef, { invoiceBaseNumber: baseNumber });
+    }
+    const nomor = `BAGB-INV-${baseNumber}`;
+    setInvoiceNomor(nomor);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setIsGeneratingInvoice(false);
+  }
+};
+
+const handleOpenInvoice = async (surat: SuratMuatInfo) => {
     setInvoiceSurat(surat);
     setSelectedOrderTTD("");
     setInvoiceNomor("");
@@ -1193,35 +1218,70 @@ export default function RekapProformaInvoicePage() {
   };
 
   const handlePrintInvoice = () => {
-    if (!invoiceSurat || !selectedItem || !invoiceNomor) return;
-    const surat = invoiceSurat;
+    if (!selectedItem || !invoiceNomor) return;
     const pi = selectedItem;
-
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
 
-    const invoiceItems = (surat.items || []).map((it, idx) => {
-      const piProduk = pi.produkItems.find((p) =>
-        p.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase()) ||
-        it.jenisPupuk.toUpperCase().includes(p.namaProduk.toUpperCase())
-      );
-      const hargaSatuan = piProduk?.hargaSatuan || 0;
-      const hargaPerZakDus = piProduk?.hargaPerZakDus || 0;
-      const kemasan = it.bobotPerUnit ? `${it.bobotPerUnit} KG` : "-";
-      const qty = it.pengambilanZAK * it.bobotPerUnit;
-      const subTotal = qty * hargaSatuan;
-      return {
-        no: idx + 1,
-        namaProduk: it.jenisPupuk,
-        produsen: piProduk?.produsen || "",
-        kemasan,
-        fot: it.fot || piProduk?.fot || "",
-        kuantitas: qty,
-        satuan: "KG",
-        hargaSatuan,
-        hargaPerZakDus,
-        subTotal,
-      };
-    });
+    let invoiceItems: any[] = [];
+    if (invoiceSurat) {
+      const surat = invoiceSurat;
+      invoiceItems = (surat.items || []).map((it, idx) => {
+        const piProduk = pi.produkItems.find((p) =>
+          p.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase()) ||
+          it.jenisPupuk.toUpperCase().includes(p.namaProduk.toUpperCase())
+        );
+        const hargaSatuan = piProduk?.hargaSatuan || 0;
+        const hargaPerZakDus = piProduk?.hargaPerZakDus || 0;
+        const kemasan = it.bobotPerUnit ? `${it.bobotPerUnit} KG` : "-";
+        const qty = it.pengambilanZAK * it.bobotPerUnit;
+        const subTotal = qty * hargaSatuan;
+        return {
+          no: idx + 1,
+          namaProduk: it.jenisPupuk,
+          produsen: piProduk?.produsen || "",
+          kemasan,
+          fot: it.fot || piProduk?.fot || "",
+          kuantitas: qty,
+          satuan: "KG",
+          hargaSatuan,
+          hargaPerZakDus,
+          subTotal,
+        };
+      });
+    } else {
+      const allSurat = getSuratMuatForPI(pi.nomorPI);
+      const mergedMap: Record<string, any> = {};
+      let no = 1;
+      allSurat.forEach((surat) => {
+        (surat.items || []).forEach((it) => {
+          const piProduk = pi.produkItems.find((p) =>
+            p.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase()) ||
+            it.jenisPupuk.toUpperCase().includes(p.namaProduk.toUpperCase())
+          );
+          const key = it.jenisPupuk;
+          if (!mergedMap[key]) {
+            const hargaSatuan = piProduk?.hargaSatuan || 0;
+            const hargaPerZakDus = piProduk?.hargaPerZakDus || 0;
+            mergedMap[key] = {
+              no: no++,
+              namaProduk: it.jenisPupuk,
+              produsen: piProduk?.produsen || "",
+              kemasan: it.bobotPerUnit ? `${it.bobotPerUnit} KG` : "-",
+              fot: it.fot || piProduk?.fot || "",
+              kuantitas: 0,
+              satuan: "KG",
+              hargaSatuan,
+              hargaPerZakDus,
+              subTotal: 0,
+            };
+          }
+          const qty = it.pengambilanZAK * it.bobotPerUnit;
+          mergedMap[key].kuantitas += qty;
+          mergedMap[key].subTotal += qty * mergedMap[key].hargaSatuan;
+        });
+      });
+      invoiceItems = Object.values(mergedMap);
+    }
 
     const totalSubTotal = invoiceItems.reduce((sum, it) => sum + it.subTotal, 0);
     const dppNilaiLain = 0;
@@ -1326,7 +1386,7 @@ export default function RekapProformaInvoicePage() {
             </div>
             <div class="meta-box">
               <p><span style="font-weight: 600;">INVOICE NO. :</span> ${invoiceNomor}</p>
-              <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(surat.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
+              <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(pi.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
               <p><span style="font-weight: 600;">CUSTOMER ID :</span> ${pi.nomorPI || ""}</p>
             </div>
           </div>
@@ -1494,136 +1554,22 @@ export default function RekapProformaInvoicePage() {
       render: (row: ProformaInvoice) => {
         const status = getStatusPengangkutan(row);
         const isComplete = status === "complete";
-        const suratList = getSuratMuatForPI(row.nomorPI);
         return (
-          <div className="flex flex-col gap-1">
-            {suratList.map((surat: SuratMuatInfo) => (
-              <button
-                key={surat.id}
-                onClick={(e) => { e.stopPropagation(); setSelectedItem(row); handleOpenInvoice(surat); }}
-                disabled={!isComplete}
-                className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
-                  isComplete
-                    ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
-                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                }`}
-                title={isComplete ? "Print Invoice" : "Belum selesai dimuat"}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Invoice
-              </button>
-            ))}
-            {suratList.length === 0 && (
-              <span className="text-xs text-gray-400">-</span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      key: "invoice",
-      header: "Invoice",
-      width: "120px",
-      render: (row: ProformaInvoice) => {
-        const status = getStatusPengangkutan(row);
-        const isComplete = status === "complete";
-        const suratList = getSuratMuatForPI(row.nomorPI);
-        return (
-          <div className="flex flex-col gap-1">
-            {suratList.map((surat: SuratMuatInfo) => (
-              <button
-                key={surat.id}
-                onClick={(e) => { e.stopPropagation(); setSelectedItem(row); handleOpenInvoice(surat); }}
-                disabled={!isComplete}
-                className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
-                  isComplete
-                    ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
-                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                }`}
-                title={isComplete ? "Print Invoice" : "Belum selesai dimuat"}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Invoice
-              </button>
-            ))}
-            {suratList.length === 0 && (
-              <span className="text-xs text-gray-400">-</span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      key: "invoice",
-      header: "Invoice",
-      width: "120px",
-      render: (row: ProformaInvoice) => {
-        const status = getStatusPengangkutan(row);
-        const isComplete = status === "complete";
-        const suratList = getSuratMuatForPI(row.nomorPI);
-        return (
-          <div className="flex flex-col gap-1">
-            {suratList.map((surat: SuratMuatInfo) => (
-              <button
-                key={surat.id}
-                onClick={(e) => { e.stopPropagation(); setSelectedItem(row); handleOpenInvoice(surat); }}
-                disabled={!isComplete}
-                className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
-                  isComplete
-                    ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
-                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                }`}
-                title={isComplete ? "Print Invoice" : "Belum selesai dimuat"}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Invoice
-              </button>
-            ))}
-            {suratList.length === 0 && (
-              <span className="text-xs text-gray-400">-</span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      key: "invoice",
-      header: "Invoice",
-      width: "120px",
-      render: (row: ProformaInvoice) => {
-        const status = getStatusPengangkutan(row);
-        const isComplete = status === "complete";
-        const suratList = getSuratMuatForPI(row.nomorPI);
-        return (
-          <div className="flex flex-col gap-1">
-            {suratList.map((surat: SuratMuatInfo) => (
-              <button
-                key={surat.id}
-                onClick={(e) => { e.stopPropagation(); setSelectedItem(row); handleOpenInvoice(surat); }}
-                disabled={!isComplete}
-                className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
-                  isComplete
-                    ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
-                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                }`}
-                title={isComplete ? "Print Invoice" : "Belum selesai dimuat"}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Invoice
-              </button>
-            ))}
-            {suratList.length === 0 && (
-              <span className="text-xs text-gray-400">-</span>
-            )}
-          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleOpenFullInvoice(row); }}
+            disabled={!isComplete}
+            className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
+              isComplete
+                ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+            }`}
+            title={isComplete ? "Print Invoice Full" : "Belum selesai dimuat"}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Invoice
+          </button>
         );
       },
     },
@@ -1886,7 +1832,7 @@ export default function RekapProformaInvoicePage() {
                       <th className="px-4 py-3 text-right text-xs font-semibold text-green-800 uppercase border">Total KG</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">No. Polisi</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-green-800 uppercase border">Driver</th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-green-800 uppercase border" colSpan={3}>Aksi</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-green-800 uppercase border" colSpan={4}>Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1927,7 +1873,13 @@ export default function RekapProformaInvoicePage() {
                             </svg>
                           </button>
                         </td>
-
+                        <td className="px-2 py-3 text-sm text-gray-600 border">
+                          <button onClick={() => handleOpenInvoice(surat)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Invoice">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
