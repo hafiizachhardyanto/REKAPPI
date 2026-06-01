@@ -330,7 +330,7 @@ export default function RekapProformaInvoicePage() {
     );
   };
 
-  const getSuratMuatForPI = (nomorPI: string) => {
+  const getSuratMuatForPI = (nomorPI: string): SuratMuatInfo[] => {
     return suratMuatMap[nomorPI] || [];
   };
 
@@ -340,7 +340,7 @@ export default function RekapProformaInvoicePage() {
 
   const getTotalLoaded = (nomorPI: string) => {
     const suratList = getSuratMuatForPI(nomorPI);
-    return suratList.reduce((sum, s) => sum + (s.totalKG || 0), 0);
+    return suratList.reduce((sum: number, s: SuratMuatInfo) => sum + (s.totalKG || 0), 0);
   };
 
   const getStatusPengangkutan = (item: ProformaInvoice) => {
@@ -362,8 +362,8 @@ export default function RekapProformaInvoicePage() {
     return item.produkItems.map((prod) => {
       const ordered = prod.kuantitas || 0;
       let loaded = 0;
-      suratList.forEach((surat) => {
-        (surat.items || []).forEach((it) => {
+      suratList.forEach((surat: SuratMuatInfo) => {
+        (surat.items || []).forEach((it: SuratMuatItem) => {
           if (it.jenisPupuk && (
             it.jenisPupuk.toUpperCase().includes(prod.namaProduk.toUpperCase()) ||
             prod.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase())
@@ -720,7 +720,7 @@ export default function RekapProformaInvoicePage() {
         });
       }
       const productMap: Record<string, number> = {};
-      (surat.items || []).forEach((it) => {
+      (surat.items || []).forEach((it: SuratMuatItem) => {
         const key = it.jenisPupuk;
         productMap[key] = (productMap[key] || 0) + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50));
       });
@@ -1264,43 +1264,47 @@ export default function RekapProformaInvoicePage() {
       <head>
         <title>Invoice ${invoiceNomor}</title>
         <style>
-          @page { size: A4; margin: 10mm 12mm 10mm 12mm; }
+          @page { size: A4; margin: 8mm 10mm 8mm 10mm; }
           @media print { body { margin: 0; padding: 0; } .no-print { display: none !important; } }
           * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1.4; color: #000; }
-          .page { width: 176mm; margin: 0 auto; position: relative; min-height: 257mm; }
+          body { font-family: Arial, sans-serif; font-size: 9px; line-height: 1.3; color: #000; }
+          .page { width: 190mm; margin: 0 auto; position: relative; min-height: 277mm; }
           .header-img { width: 100%; display: block; margin-bottom: 0; }
-          .title-bar { text-align: center; background: #15803d; color: white; padding: 6px 0; margin: 6px 0 10px 0; font-weight: bold; font-size: 13px; letter-spacing: 4px; }
-          .info-section { margin-bottom: 10px; }
-          .info-row { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 10px; }
-          .info-label { font-weight: 600; }
-          .customer-area { margin-bottom: 10px; font-size: 10px; }
-          .customer-area p { margin-bottom: 2px; }
-          .customer-title { font-weight: 700; margin-bottom: 4px; }
-          .meta-box { text-align: right; font-size: 10px; margin-bottom: 10px; }
+          .title-bar { text-align: center; background: #15803d; color: white; padding: 4px 0; margin: 4px 0 8px 0; font-weight: bold; font-size: 12px; letter-spacing: 6px; }
+          .info-section { display: flex; justify-content: space-between; margin-bottom: 8px; }
+          .customer-box { width: 55%; font-size: 9px; }
+          .customer-box p { margin-bottom: 1px; }
+          .customer-title { font-size: 9px; margin-bottom: 2px; }
+          .customer-name { font-weight: 700; font-size: 10px; }
+          .meta-box { width: 40%; text-align: right; font-size: 9px; }
           .meta-box p { margin-bottom: 2px; }
-          .data-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-          .data-table th { background: #f0fdf4; font-size: 9px; padding: 5px 3px; border: 1px solid #000; font-weight: 700; text-align: center; }
-          .data-table td { border: 1px solid #000; padding: 5px 3px; vertical-align: top; }
-          .summary-table { width: 100%; border-collapse: collapse; margin-top: 0; border: 1px solid #000; border-top: none; }
-          .summary-table td { border: 1px solid #000; padding: 4px 8px; font-size: 10px; }
-          .summary-table .label { text-align: left; font-weight: 600; }
-          .summary-table .value { text-align: right; font-family: monospace; }
-          .total-pembayaran { font-weight: 700; font-size: 11px; }
-          .terbilang-box { border: 1px solid #000; border-top: none; padding: 6px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-          .terbilang-label { font-size: 9px; font-weight: 600; margin-bottom: 2px; }
-          .bank-area { border: 1px solid #000; padding: 8px 10px; margin-top: 10px; font-size: 9px; width: 55%; }
-          .bank-area p { margin-bottom: 2px; }
-          .bank-title { font-weight: 700; margin-bottom: 4px; }
-          .signature-section { display: flex; justify-content: space-between; margin-top: 20px; }
-          .signature-box { width: 45%; text-align: center; font-size: 10px; }
-          .signature-box p { margin-bottom: 2px; }
-          .signature-title { margin-bottom: 40px; }
-          .signature-img { height: 45px; object-fit: contain; margin: 0 auto; display: block; }
-          .signature-name { font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block; }
-          .footer-img { width: 100%; display: block; margin-top: 10px; }
-          .print-btn { background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 10px; }
-          .print-bar { text-align: center; padding: 10px; background: #f3f4f6; position: sticky; top: 0; z-index: 100; }
+          .data-table { width: 100%; border-collapse: collapse; margin-bottom: 0; font-size: 9px; }
+          .data-table th { background: #e8f5e9; font-size: 8px; padding: 4px 2px; border: 1px solid #000; font-weight: 700; text-align: center; }
+          .data-table td { border: 1px solid #000; padding: 4px 2px; vertical-align: top; font-size: 9px; }
+          .summary-section { display: flex; justify-content: flex-end; margin-top: 0; }
+          .summary-table { width: 55%; border-collapse: collapse; font-size: 9px; }
+          .summary-table td { border: 1px solid #000; padding: 3px 6px; }
+          .summary-label { text-align: left; font-weight: 600; }
+          .summary-value { text-align: right; font-family: monospace; }
+          .total-row { font-weight: 700; font-size: 10px; }
+          .terbilang-box { border: 1px solid #000; border-top: none; padding: 4px 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+          .terbilang-label { font-size: 8px; font-weight: 600; margin-bottom: 1px; }
+          .bottom-section { display: flex; justify-content: space-between; margin-top: 8px; }
+          .left-boxes { width: 48%; }
+          .pay-box { border: 1px solid #000; padding: 6px 8px; margin-bottom: 6px; font-size: 9px; }
+          .pay-box p { margin-bottom: 1px; }
+          .pay-title { font-weight: 700; margin-bottom: 3px; }
+          .order-box { border: 1px solid #000; padding: 6px 8px; margin-bottom: 6px; font-size: 9px; }
+          .order-box p { margin-bottom: 1px; }
+          .ttd-box { border: 1px solid #000; padding: 6px 8px; font-size: 9px; }
+          .ttd-box p { margin-bottom: 1px; }
+          .right-signature { width: 48%; text-align: center; font-size: 9px; }
+          .right-signature p { margin-bottom: 2px; }
+          .sig-img { height: 50px; object-fit: contain; margin: 0 auto; display: block; }
+          .sig-name { font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block; }
+          .footer-img { width: 100%; display: block; margin-top: 8px; }
+          .print-btn { background: #16a34a; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; margin: 8px; }
+          .print-bar { text-align: center; padding: 8px; background: #f3f4f6; position: sticky; top: 0; z-index: 100; }
           @media print { .print-bar { display: none !important; } }
         </style>
       </head>
@@ -1312,32 +1316,30 @@ export default function RekapProformaInvoicePage() {
           <img src="/Picture3.png" alt="Header" class="header-img" onerror="this.style.display='none'" />
           <div class="title-bar">I N V O I C E</div>
           <div class="info-section">
-            <div class="info-row">
-              <div class="customer-area">
-                <p class="customer-title">Dipesan Oleh :</p>
-                <p style="font-weight: 700;">${pi.namaCustomer || ""}</p>
-                <p>${(pi.alamatCustomer || "").split("\n").join("<br>")}</p>
-                ${pi.npwp ? `<p style="margin-top: 4px;">NP/WP: ${pi.npwp}</p>` : ""}
-              </div>
-              <div class="meta-box">
-                <p><span style="font-weight: 600;">INVOICE NO. :</span> ${invoiceNomor}</p>
-                <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(surat.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
-                <p><span style="font-weight: 600;">CUSTOMER ID :</span> ${pi.nomorPI || ""}</p>
-              </div>
+            <div class="customer-box">
+              <p class="customer-title">Kepada Yth,</p>
+              <p class="customer-name">${pi.namaCustomer || ""}</p>
+              <p>${(pi.alamatCustomer || "").split("\n").join("<br>")}</p>
+              ${pi.npwp ? `<p style="margin-top: 3px;">NP/WP: ${pi.npwp}</p>` : ""}
+            </div>
+            <div class="meta-box">
+              <p><span style="font-weight: 600;">INVOICE NO. :</span> ${invoiceNomor}</p>
+              <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(surat.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
+              <p><span style="font-weight: 600;">CUSTOMER ID :</span> ${pi.nomorPI || ""}</p>
             </div>
           </div>
           <table class="data-table">
             <thead>
               <tr>
-                <th style="width: 28px;">NO</th>
-                <th style="text-align: left; padding-left: 8px;">NAMA PRODUK</th>
-                <th style="text-align: left; padding-left: 8px;">PRODUSEN</th>
-                <th style="width: 60px;">KEMASAN</th>
-                <th style="width: 50px;">FOT</th>
-                <th style="width: 80px;">KUANTITAS</th>
-                <th style="width: 90px;">HARGA SATUAN<br>PER KG</th>
-                <th style="width: 90px;">PER ZAK/DUS</th>
-                <th style="width: 100px;">SUB TOTAL</th>
+                <th style="width: 24px;">NO</th>
+                <th style="text-align: left; padding-left: 4px;">NAMA PRODUK</th>
+                <th style="text-align: left; padding-left: 4px;">PRODUSEN</th>
+                <th style="width: 50px;">KEMASAN</th>
+                <th style="width: 40px;">FOT</th>
+                <th style="width: 60px;">KUANTITAS</th>
+                <th style="width: 80px;">HARGA SATUAN<br>PER KG</th>
+                <th style="width: 80px;">PER ZAK</th>
+                <th style="width: 90px;">SUB TOTAL</th>
               </tr>
             </thead>
             <tbody>
@@ -1345,61 +1347,68 @@ export default function RekapProformaInvoicePage() {
               ${emptyRows}
             </tbody>
           </table>
-          <table class="summary-table">
-            <tr>
-              <td style="border: none; width: 60%;"></td>
-              <td class="label" style="width: 20%;">TOTAL</td>
-              <td class="value" style="width: 20%;">${formatRupiah(totalSubTotal)}</td>
-            </tr>
-            <tr>
-              <td style="border: none;"></td>
-              <td class="label">DPP NILAI LAIN-LAIN</td>
-              <td class="value">${formatRupiah(dppNilaiLain)}</td>
-            </tr>
-            <tr>
-              <td style="border: none;"></td>
-              <td class="label">ONGKOS KIRIM</td>
-              <td class="value">${ongkosKirim > 0 ? formatRupiah(ongkosKirim) : "Rp -"}</td>
-            </tr>
-            <tr>
-              <td style="border: none;"></td>
-              <td class="label">PPN</td>
-              <td class="value">${ppn > 0 ? formatRupiah(ppn) : "Rp -"}</td>
-            </tr>
-            <tr>
-              <td style="border: none;"></td>
-              <td class="label">SUB TOTAL</td>
-              <td class="value">${formatRupiah(totalSubTotal + ppn)}</td>
-            </tr>
-            <tr>
-              <td style="border: none;"></td>
-              <td class="label total-pembayaran">TOTAL PEMBAYARAN :</td>
-              <td class="value total-pembayaran">${formatRupiah(totalPembayaran)}</td>
-            </tr>
-          </table>
+          <div class="summary-section">
+            <table class="summary-table">
+              <tr>
+                <td class="summary-label" style="border: none;"></td>
+                <td class="summary-label">TOTAL</td>
+                <td class="summary-value">${formatRupiah(totalSubTotal)}</td>
+              </tr>
+              <tr>
+                <td style="border: none;"></td>
+                <td class="summary-label">DPP NILAI LAIN-LAIN</td>
+                <td class="summary-value">${formatRupiah(dppNilaiLain)}</td>
+              </tr>
+              <tr>
+                <td style="border: none;"></td>
+                <td class="summary-label">ONGKOS KIRIM</td>
+                <td class="summary-value">${ongkosKirim > 0 ? formatRupiah(ongkosKirim) : "Rp -"}</td>
+              </tr>
+              <tr>
+                <td style="border: none;"></td>
+                <td class="summary-label">PPN</td>
+                <td class="summary-value">${ppn > 0 ? formatRupiah(ppn) : "Rp -"}</td>
+              </tr>
+              <tr>
+                <td style="border: none;"></td>
+                <td class="summary-label">SUB TOTAL</td>
+                <td class="summary-value">${formatRupiah(totalSubTotal + ppn)}</td>
+              </tr>
+              <tr>
+                <td style="border: none;"></td>
+                <td class="summary-label total-row">TOTAL PEMBAYARAN :</td>
+                <td class="summary-value total-row">${formatRupiah(totalPembayaran)}</td>
+              </tr>
+            </table>
+          </div>
           <div class="terbilang-box">
             <div class="terbilang-label">TERBILANG :</div>
             <div>${numberToWords(Math.round(totalPembayaran))}</div>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-top: 10px;">
-            <div class="bank-area">
-              <p class="bank-title">Pembayaran PT. Bukit Agrochemical Baru</p>
-              <p>Bank BRI Cabang Lamandau- Kalimantan Tengah</p>
-              <p>No. Rek : 2232-01000-879-56</p>
+          <div class="bottom-section">
+            <div class="left-boxes">
+              <div class="pay-box">
+                <p class="pay-title">Pembayaran PT. Bukit Agrochemical Baru</p>
+                <p>Bank BRI Cabang Lamandau- Kalimantan Tengah</p>
+                <p>No. Rek : 2232-01000-879-567</p>
+              </div>
+              <div class="order-box">
+                <p style="font-weight: 600;">Dipesan oleh:</p>
+                <p style="font-weight: 700;">${pi.namaCustomer || ""}</p>
+              </div>
+              <div class="ttd-box">
+                <p style="font-weight: 600;">Diorder Oleh:</p>
+                <p>PT. Bukit Agrochemical Baru</p>
+                <div style="height: 35px;"></div>
+                ${orderTTD ? `<p style="font-weight: 700; border-top: 1px solid #000; padding-top: 2px; display: inline-block;">${orderTTD.nama}</p>` : `<p style="font-weight: 700;">_________________</p>`}
+                ${orderTTD ? `<p>${orderTTD.jabatan}</p>` : ""}
+              </div>
             </div>
-            <div style="width: 40%; text-align: center; font-size: 10px;">
-              <p style="margin-bottom: 40px;">Hormat kami,<br>PT.Bukit Agrochemical Baru</p>
-              <img src="/Picture4.png" alt="TTD" style="height: 45px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />
+            <div class="right-signature">
+              <p style="margin-bottom: 30px;">Hormat kami,<br>PT. Bukit Agrochemical Baru</p>
+              <img src="/Picture4.png" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />
               <p style="font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">Sri Setyo Wibowo</p>
               <p>Manager Keuangan</p>
-            </div>
-          </div>
-          <div class="signature-section">
-            <div class="signature-box">
-              <p class="signature-title">Diorder Oleh :<br>PT Bukit Agrochemical Baru</p>
-              ${orderTTD ? `<img src="${orderTTD.ttdImage}" alt="TTD" class="signature-img" onerror="this.style.display='none'" />` : `<div style="height: 45px;"></div>`}
-              ${orderTTD ? `<p class="signature-name">${orderTTD.nama}</p>` : `<p class="signature-name">_________________</p>`}
-              ${orderTTD ? `<p>${orderTTD.jabatan}</p>` : ""}
             </div>
           </div>
           <img src="/Picture1.png" alt="Footer" class="footer-img" onerror="this.style.display='none'" />
@@ -1739,18 +1748,18 @@ export default function RekapProformaInvoicePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {getSuratMuatForPI(selectedItem.nomorPI).map((surat, idx) => (
+                    {getSuratMuatForPI(selectedItem.nomorPI).map((surat: SuratMuatInfo, idx: number) => (
                       <tr key={idx} className="border-b">
                         <td className="px-4 py-3 text-sm text-gray-900 border">{idx + 1}</td>
                         <td className="px-4 py-3 text-sm font-mono font-bold text-green-700 border">{surat.nomorSeri}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 border">{surat.tanggal}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 border">
-                          {surat.items.map((it, i) => (
+                          {surat.items.map((it: SuratMuatItem, i: number) => (
                             <div key={i}>{it.jenisPupuk} ({it.pengambilanZAK} ZAK)</div>
                           ))}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono border">
-                          {surat.items.reduce((sum, it) => sum + (it.pengambilanZAK || 0), 0).toLocaleString()}
+                          {surat.items.reduce((sum: number, it: SuratMuatItem) => sum + (it.pengambilanZAK || 0), 0).toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-sm font-bold text-gray-900 text-right font-mono border">{surat.totalKG.toLocaleString()}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 border">{surat.nomorPolisi}</td>
