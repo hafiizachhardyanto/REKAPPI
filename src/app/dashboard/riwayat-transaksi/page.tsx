@@ -724,7 +724,7 @@ export default function RiwayatTransaksiPage() {
             <div class="info-row">
               <span class="info-label">Nomor Seri : ${item.nomorSeri || "-"}</span>
             </div>
-            ${piDisplay ? `<div class="info-row"><span class="info-label">Nomor PI : ${piDisplay}</span></div>` : ""}
+            
           </div>
           <div class="recipient-box">
             <p class="recipient-title">Kepada Yth :</p>
