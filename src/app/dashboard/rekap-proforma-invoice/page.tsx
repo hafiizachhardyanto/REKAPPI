@@ -1089,8 +1089,27 @@ export default function RekapProformaInvoicePage() {
     setIsGeneratingBast(true);
     setIsBastModalOpen(true);
     try {
-      const nomor = await getNextBastNumber();
-      setBastNomorSeri(nomor);
+      let existingBa: any = null;
+      const q1 = query(collection(db, "beritaAcara"), where("nomorPI", "==", item.nomorPI));
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) existingBa = snap1.docs[0];
+      if (!existingBa) {
+        const q2 = query(collection(db, "beritaAcara"), where("nomorPI", "array-contains", item.nomorPI));
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) existingBa = snap2.docs[0];
+      }
+      if (existingBa) {
+        const baData = existingBa.data();
+        setBastNomorSeri(baData.nomorSeri || "");
+        const matchedTtd = ttdList.find((t) =>
+          t.nama === baData.pihakPertama?.nama &&
+          t.jabatan === baData.pihakPertama?.jabatan
+        );
+        if (matchedTtd) setBastTTDId(matchedTtd.id);
+      } else {
+        const nomor = await getNextBastNumber();
+        setBastNomorSeri(nomor);
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -1256,6 +1275,16 @@ export default function RekapProformaInvoicePage() {
     printWindow.document.write(html);
     printWindow.document.close();
     try {
+      const q1 = query(collection(db, "beritaAcara"), where("nomorPI", "==", selectedItem.nomorPI));
+      const snap1 = await getDocs(q1);
+      for (const d of snap1.docs) {
+        await deleteDoc(doc(db, "beritaAcara", d.id));
+      }
+      const q2 = query(collection(db, "beritaAcara"), where("nomorPI", "array-contains", selectedItem.nomorPI));
+      const snap2 = await getDocs(q2);
+      for (const d of snap2.docs) {
+        await deleteDoc(doc(db, "beritaAcara", d.id));
+      }
       await addDoc(collection(db, "beritaAcara"), {
         nomorSeri: bastNomorSeri,
         nomorPI: selectedItem.nomorPI,
@@ -2337,15 +2366,26 @@ export default function RekapProformaInvoicePage() {
                       </button>
                     )}
                     {bastExists && (
-                      <button
-                        onClick={() => handleResetBast(selectedItem.nomorPI)}
-                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Reset BA
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleOpenBast(selectedItem)}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          Print BA
+                        </button>
+                        <button
+                          onClick={() => handleResetBast(selectedItem.nomorPI)}
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Reset BA
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
