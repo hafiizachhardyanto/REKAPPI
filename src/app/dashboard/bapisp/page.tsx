@@ -382,7 +382,7 @@ export default function BapispPage() {
         <style>
           @page { size: A4; margin: 10mm 12mm 10mm 12mm; }
           @media print {
-            body { margin: 0; padding: 0; }
+            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .no-print { display: none !important; }
             .page-break { page-break-after: always; }
           }
@@ -454,7 +454,7 @@ export default function BapispPage() {
           <p style="margin-bottom: 12px; font-size: 10px; text-align: justify;">Pihak pertama menyerahkan barang kepada pihak kedua, dan pihak kedua menyatakan telah menerima barang dari pihak pertama, berupa daftar terlampir :</p>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px;">
             <thead>
-              <tr style="background: #f0fdf4;">
+              <tr style="background: #f0fdf4; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                 <th style="font-size: 9px; padding: 5px 3px; border: 1px solid #000; font-weight: 700; text-align: center; width: 30px;">No</th>
                 <th style="font-size: 9px; padding: 5px 3px; border: 1px solid #000; font-weight: 700; text-align: center; width: 80px;">Tanggal Muat</th>
                 <th style="font-size: 9px; padding: 5px 3px; border: 1px solid #000; font-weight: 700; text-align: center;">Nama Produk</th>
@@ -468,19 +468,21 @@ export default function BapispPage() {
             <tbody>${rowsHtml}</tbody>
           </table>
           <p style="margin-bottom: 16px; font-size: 10px; text-align: justify;">Demikian berita acara serah terima barang ini diperbuat oleh kedua belah pihak, adapun barang-barang tersebut dalam keadaan baik dan cukup, sejak penandatanganan berita acara ini, maka barang-barang tersebut menjadi tanggung jawab pihak kedua.</p>
-          <div style="display: flex; justify-content: space-between; margin-top: 30px;">
-            <div style="width: 45%; text-align: center;">
-              <p style="font-size: 9px; margin-bottom: 50px;">${pi.namaCustomer}<br>(Pihak Kedua)</p>
-              <div style="height: 50px;"></div>
-              <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${pi.namaCustomer}</p>
-            </div>
-            <div style="width: 45%; text-align: center;">
-              <p style="font-size: 9px; margin-bottom: 50px;">${ttd?.nama || "........................"}<br>(Pihak Pertama)</p>
-              ${ttd ? `<img src="${ttd.ttdImage}" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />` : `<div style="height: 50px;"></div>`}
-              <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${ttd?.nama || "........................"}</p>
-              <p style="font-size: 9px; color: #333; margin-top: 2px;">${ttd?.jabatan || ""}</p>
-            </div>
-          </div>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 30px;">
+            <tr>
+              <td style="width: 50%; text-align: center; vertical-align: bottom; padding: 0 10px;">
+                <p style="font-size: 9px; margin-bottom: 50px;">${pi.namaCustomer}<br>(Pihak Kedua)</p>
+                <div style="height: 50px;"></div>
+                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${pi.namaCustomer}</p>
+              </td>
+              <td style="width: 50%; text-align: center; vertical-align: bottom; padding: 0 10px;">
+                <p style="font-size: 9px; margin-bottom: 50px;">${ttd?.nama || "........................"}<br>(Pihak Pertama)</p>
+                ${ttd ? `<img src="${ttd.ttdImage}" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />` : `<div style="height: 50px;"></div>`}
+                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${ttd?.nama || "........................"}</p>
+                <p style="font-size: 9px; color: #333; margin-top: 2px;">${ttd?.jabatan || ""}</p>
+              </td>
+            </tr>
+          </table>
         </div>
       </div>
     `;
@@ -518,7 +520,7 @@ export default function BapispPage() {
         <img src="/LogoAGRO.png" alt="Watermark" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: auto; opacity: 0.08; pointer-events: none; z-index: 0;" onerror="this.style.display='none'" />
         <div style="position: relative; z-index: 1;">
           <img src="/logo.png" alt="Header" style="width: 100%; display: block; margin-bottom: 0;" onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('afterbegin', '<div style=text-align:center;padding:10px;border:1px solid #ccc;margin-bottom:10px;>Logo tidak tersedia</div>');" />
-          <div style="text-align: center; margin: 8px 0 10px 0; padding: 5px 0; background: #dcfce7; border-top: 2px solid #16a34a; border-bottom: 2px solid #16a34a;">
+          <div style="text-align: center; margin: 8px 0 10px 0; padding: 5px 0; background: #dcfce7; border-top: 2px solid #16a34a; border-bottom: 2px solid #16a34a; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
             <h1 style="color: #111; font-size: 15px; margin: 0; font-weight: bold; letter-spacing: 3px;">PROFORMA INVOICE</h1>
           </div>
           <div style="margin-bottom: 10px;">
@@ -544,14 +546,14 @@ export default function BapispPage() {
           </div>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 0;">
             <thead>
-              <tr>
-                <th style="background: #ffedd5; color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 28px;">NO</th>
-                <th style="background: #ffedd5; color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: left; padding-left: 8px;">Nama Produk</th>
-                <th style="background: #ffedd5; color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 45px;">Fot</th>
-                <th style="background: #ffedd5; color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 90px;">Produsen</th>
-                <th style="background: #ffedd5; color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 60px;">Kuantitas<br>(kg)</th>
-                <th style="background: #ffedd5; color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 95px;">Harga Satuan</th>
-                <th style="background: #ffedd5; color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 105px;">Total Harga</th>
+              <tr style="background: #ffedd5; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <th style="color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 28px;">NO</th>
+                <th style="color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: left; padding-left: 8px;">Nama Produk</th>
+                <th style="color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 45px;">Fot</th>
+                <th style="color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 90px;">Produsen</th>
+                <th style="color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 60px;">Kuantitas<br>(kg)</th>
+                <th style="color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 95px;">Harga Satuan</th>
+                <th style="color: #000; font-size: 9px; padding: 5px 3px; font-weight: 700; border: 1px solid #000; text-align: center; width: 105px;">Total Harga</th>
               </tr>
             </thead>
             <tbody>${produkRows}${emptyRows}</tbody>
@@ -568,7 +570,7 @@ export default function BapispPage() {
               ${(pi.uangMuka || 0) > 0 ? `<div style="display: flex; justify-content: space-between; padding: 3px 10px; border-bottom: 1px solid #ddd; font-size: 9px;"><span style="color: #333;">Uang Muka</span><span style="font-weight: 600; font-family: monospace; font-size: 9px;">${formatRupiah(pi.uangMuka)}</span></div>` : ""}
               ${pi.includePPN ? `<div style="display: flex; justify-content: space-between; padding: 3px 10px; border-bottom: 1px solid #ddd; font-size: 9px;"><span style="color: #333;">PPN 11%</span><span style="font-weight: 600; font-family: monospace; font-size: 9px;">${formatRupiah(pi.ppnNominal)}</span></div>` : ""}
               ${(pi.ongkosKirim || 0) > 0 ? `<div style="display: flex; justify-content: space-between; padding: 3px 10px; border-bottom: 1px solid #ddd; font-size: 9px;"><span style="color: #333;">Ongkos Kirim</span><span style="font-weight: 600; font-family: monospace; font-size: 9px;">${formatRupiah(pi.ongkosKirim)}</span></div>` : ""}
-              <div style="display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: none; background: #f0fdf4; border-top: 1px solid #16a34a;">
+              <div style="display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: none; background: #f0fdf4; border-top: 1px solid #16a34a; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                 <span style="font-weight: 700; color: #000;">Jumlah Tertagih</span><span style="font-size: 10px; color: #000; font-weight: 700; font-family: monospace;">${formatRupiah(pi.jumlahTertagih)}</span>
               </div>
               <div style="padding: 5px 10px; text-align: right; border-top: 1px solid #ddd; font-size: 11px;">
@@ -633,7 +635,7 @@ export default function BapispPage() {
       return `
         <div class="page" style="width: 176mm; margin: 0 auto; position: relative; min-height: 257mm; display: flex; flex-direction: column; font-family: Arial, sans-serif; font-size: 10px; line-height: 1.4; color: #000;">
           <img src="/Picture3.png" alt="Header" style="width: 100%; display: block; margin-bottom: 0;" onerror="this.style.display='none'" />
-          <div style="text-align: center; background: #15803d; color: white; padding: 8px 0; margin: 8px 0 12px 0; font-weight: bold; font-size: 14px; letter-spacing: 2px;">SURAT PENGANGKUTAN</div>
+          <div style="text-align: center; background: #15803d; color: white; padding: 8px 0; margin: 8px 0 12px 0; font-weight: bold; font-size: 14px; letter-spacing: 2px; -webkit-print-color-adjust: exact; print-color-adjust: exact;">SURAT PENGANGKUTAN</div>
           <div style="margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px;">
               <span>Lamandau, ${new Date(surat.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</span>
@@ -654,10 +656,10 @@ export default function BapispPage() {
             <p style="margin-bottom: 2px;">Dengan ini mohon dimuatkan pupuk dengan rincian sebagai berikut :</p>
           </div>
           <div style="margin-bottom: 10px;">
-            <div style="text-align: center; background: #dcfce7; border: 1px solid #000; border-bottom: none; padding: 4px 0; font-size: 10px; font-weight: 700;">DASAR PENGANGKUTAN</div>
+            <div style="text-align: center; background: #dcfce7; border: 1px solid #000; border-bottom: none; padding: 4px 0; font-size: 10px; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact;">DASAR PENGANGKUTAN</div>
             <table style="width: 100%; border-collapse: collapse;">
               <thead>
-                <tr style="background: #f0fdf4;">
+                <tr style="background: #f0fdf4; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                   <th style="font-size: 9px; padding: 5px 3px; border: 1px solid #000; font-weight: 700; text-align: center; width: 30px;">NO</th>
                   ${!isGI ? `<th style="font-size: 9px; padding: 5px 3px; border: 1px solid #000; font-weight: 700; text-align: center; width: 100px;">NOMOR SUB DO</th>` : ""}
                   <th style="font-size: 9px; padding: 5px 3px; border: 1px solid #000; font-weight: 700; text-align: center; width: 100px;">NOMOR PI</th>
@@ -671,7 +673,7 @@ export default function BapispPage() {
             </table>
           </div>
           <div style="margin-bottom: 10px;">
-            <div style="text-align: center; background: #dcfce7; border: 1px solid #000; border-bottom: none; padding: 4px 0; font-size: 10px; font-weight: 700;">DATA UNIT ANGKUTAN</div>
+            <div style="text-align: center; background: #dcfce7; border: 1px solid #000; border-bottom: none; padding: 4px 0; font-size: 10px; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact;">DATA UNIT ANGKUTAN</div>
             <table style="width: 100%; border-collapse: collapse;">
               <tbody>
                 <tr>
@@ -695,19 +697,21 @@ export default function BapispPage() {
             <p style="margin-bottom: 2px;">- Sub DO berlaku selama 3 hari dari tanggal Sub DO diterbitkan.</p>
             <p style="margin-bottom: 2px;">- Untuk konfirmasi dengan Customer Service kami, silahkan scan QRcode di atas.</p>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-top: auto; padding-top: 20px;">
-            <div style="width: 45%; text-align: center;">
-              <p style="font-size: 9px; margin-bottom: 45px;">Hormat Kami,<br>PT. BUKIT AGROCHEMICAL BARU</p>
-              <img src="/Picture2.png" alt="TTD" style="max-height: 105px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />
-              <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">HENDRA PRAMASYANTO</p>
-            </div>
-            <div style="width: 45%; text-align: center;">
-              <p style="font-size: 9px; margin-bottom: 45px;">Diangkut oleh,<br>Driver</p>
-              <div style="height: 50px;"></div>
-              <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${surat.driverUnit || ""}</p>
-            </div>
-          </div>
-          <img src="/Picture1.png" alt="Footer" style="width: 100%; display: block; margin-top: auto; padding-top: 10px;" onerror="this.style.display='none'" />
+          <table style="width: 100%; border-collapse: collapse; margin-top: auto;">
+            <tr>
+              <td style="width: 50%; text-align: center; vertical-align: bottom; padding: 20px 10px 0;">
+                <p style="font-size: 9px; margin-bottom: 45px;">Hormat Kami,<br>PT. BUKIT AGROCHEMICAL BARU</p>
+                <img src="/Picture2.png" alt="TTD" style="max-height: 105px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />
+                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">HENDRA PRAMASYANTO</p>
+              </td>
+              <td style="width: 50%; text-align: center; vertical-align: bottom; padding: 20px 10px 0;">
+                <p style="font-size: 9px; margin-bottom: 45px;">Diangkut oleh,<br>Driver</p>
+                <div style="height: 105px;"></div>
+                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${surat.driverUnit || ""}</p>
+              </td>
+            </tr>
+          </table>
+          <img src="/Picture1.png" alt="Footer" style="width: 100%; display: block; margin-top: 10px;" onerror="this.style.display='none'" />
         </div>
       `;
     }).join('<div class="page-break"></div>');
