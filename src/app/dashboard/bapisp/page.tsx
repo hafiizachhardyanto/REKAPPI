@@ -6,7 +6,6 @@ import {
   getDocs,
   query,
   orderBy,
-  where,
   doc,
   updateDoc,
   serverTimestamp,
@@ -306,12 +305,22 @@ export default function BapispPage() {
     });
   };
 
-  const isBastOldEnough = (bast: BeritaAcaraData | undefined) => {
-    if (!bast || !bast.createdAt) return false;
-    const created = bast.createdAt instanceof Date ? bast.createdAt : new Date(bast.createdAt);
+  const getLastSpDateForPI = (nomorPI: string): Date | null => {
+    const spItems = getSuratForPI(nomorPI);
+    if (spItems.length === 0) return null;
+    const dates = spItems
+      .map((s) => (s.tanggal ? new Date(s.tanggal) : null))
+      .filter((d): d is Date => d !== null && !isNaN(d.getTime()));
+    if (dates.length === 0) return null;
+    return new Date(Math.max(...dates.map((d) => d.getTime())));
+  };
+
+  const isTtdAccessible = (nomorPI: string): boolean => {
+    const lastSpDate = getLastSpDateForPI(nomorPI);
+    if (!lastSpDate) return false;
     const now = new Date();
-    const diffTime = now.getTime() - created.getTime();
-    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    const diffMs = now.getTime() - lastSpDate.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
     return diffDays >= 1;
   };
 
@@ -323,7 +332,7 @@ export default function BapispPage() {
     return { label: "Belum TTD", color: "bg-yellow-100 text-yellow-700 border-yellow-200" };
   };
 
-  const handleOpenPrint = (pi: ProformaInvoice) => {
+  const handleOpenTtdModal = (pi: ProformaInvoice) => {
     const bast = getBastForPI(pi.nomorPI);
     if (!bast) return;
     setSelectedPI(pi);
@@ -332,57 +341,12 @@ export default function BapispPage() {
     setIsTtdModalOpen(true);
   };
 
-  const handlePrintBapisp = async () => {
+  const handleSaveTtd = async () => {
     if (!selectedPI || !selectedBast || !selectedTtdId) return;
     const ttd = ttdList.find((t) => t.id === selectedTtdId);
     if (!ttd) return;
-
     setIsPrinting(true);
     try {
-      const spList = getSuratForPI(selectedPI.nomorPI);
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) return;
-
-      const baHtml = generateBAHtml(selectedBast, ttd, selectedPI);
-      const piHtml = generatePIHtml(selectedPI);
-      const spHtml = generateSPHtml(spList, selectedPI);
-
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>BAPISP ${selectedPI.nomorPI}</title>
-          <style>
-            @page { size: A4; margin: 10mm 12mm 10mm 12mm; }
-            @media print {
-              body { margin: 0; padding: 0; }
-              .no-print { display: none !important; }
-              .page-break { page-break-after: always; }
-            }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1.4; color: #000; }
-            .page { width: 176mm; margin: 0 auto; position: relative; min-height: 257mm; padding-bottom: 10mm; }
-            .page-break { page-break-after: always; }
-            .print-btn { background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 10px; }
-            .print-bar { text-align: center; padding: 10px; background: #f3f4f6; position: sticky; top: 0; z-index: 100; }
-            @media print { .print-bar { display: none !important; } }
-          </style>
-        </head>
-        <body>
-          <div class="print-bar no-print">
-            <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
-          </div>
-          ${baHtml}
-          <div class="page-break"></div>
-          ${piHtml}
-          <div class="page-break"></div>
-          ${spHtml}
-        </body>
-        </html>
-      `;
-      printWindow.document.write(html);
-      printWindow.document.close();
-
       await updateDoc(doc(db, "beritaAcara", selectedBast.id), {
         ttdId: ttd.id,
         ttdNama: ttd.nama,
@@ -391,15 +355,63 @@ export default function BapispPage() {
         updatedAt: serverTimestamp(),
       });
       fetchData();
+      setIsTtdModalOpen(false);
+      setSelectedTtdId("");
     } catch (error) {
       console.error(error);
     } finally {
       setIsPrinting(false);
-      setIsTtdModalOpen(false);
     }
   };
 
-  const generateBAHtml = (bast: BeritaAcaraData, ttd: TTDData, pi: ProformaInvoice) => {
+  const handlePrint = (pi: ProformaInvoice) => {
+    const bast = getBastForPI(pi.nomorPI);
+    if (!bast) return;
+    const spList = getSuratForPI(pi.nomorPI);
+    const ttd = bast.ttdId ? ttdList.find((t) => t.id === bast.ttdId) : undefined;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    const baHtml = generateBAHtml(bast, ttd, pi);
+    const piHtml = generatePIHtml(pi);
+    const spHtml = generateSPHtml(spList, pi);
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>BAPISP ${pi.nomorPI}</title>
+        <style>
+          @page { size: A4; margin: 10mm 12mm 10mm 12mm; }
+          @media print {
+            body { margin: 0; padding: 0; }
+            .no-print { display: none !important; }
+            .page-break { page-break-after: always; }
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1.4; color: #000; }
+          .page { width: 176mm; margin: 0 auto; position: relative; min-height: 257mm; padding-bottom: 10mm; }
+          .page-break { page-break-after: always; }
+          .print-btn { background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 10px; }
+          .print-bar { text-align: center; padding: 10px; background: #f3f4f6; position: sticky; top: 0; z-index: 100; }
+          @media print { .print-bar { display: none !important; } }
+        </style>
+      </head>
+      <body>
+        <div class="print-bar no-print">
+          <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+        </div>
+        ${baHtml}
+        <div class="page-break"></div>
+        ${piHtml}
+        <div class="page-break"></div>
+        ${spHtml}
+      </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  const generateBAHtml = (bast: BeritaAcaraData, ttd: TTDData | undefined, pi: ProformaInvoice) => {
     const now = new Date();
     const hari = now.toLocaleDateString("id-ID", { weekday: "long" });
     const tanggalLengkap = now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
@@ -427,9 +439,9 @@ export default function BapispPage() {
           <div style="margin-bottom: 10px;">
             <p style="font-weight: 700; margin-bottom: 4px; font-size: 10px;">Selanjutnya disebut Pihak Pertama.</p>
             <table style="width: 100%; margin-bottom: 8px; font-size: 10px;">
-              <tr><td style="padding: 2px 0; vertical-align: top; width: 100px; font-weight: 600;">Nama</td><td>: ${ttd.nama}</td></tr>
+              <tr><td style="padding: 2px 0; vertical-align: top; width: 100px; font-weight: 600;">Nama</td><td>: ${ttd?.nama || "............................"}</td></tr>
               <tr><td style="padding: 2px 0; vertical-align: top; font-weight: 600;">Perusahaan</td><td>: PT Bukit Agrochemical Baru</td></tr>
-              <tr><td style="padding: 2px 0; vertical-align: top; font-weight: 600;">Jabatan</td><td>: ${ttd.jabatan}</td></tr>
+              <tr><td style="padding: 2px 0; vertical-align: top; font-weight: 600;">Jabatan</td><td>: ${ttd?.jabatan || "............................"}</td></tr>
             </table>
           </div>
           <div style="margin-bottom: 10px;">
@@ -463,10 +475,10 @@ export default function BapispPage() {
               <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${pi.namaCustomer}</p>
             </div>
             <div style="width: 45%; text-align: center;">
-              <p style="font-size: 9px; margin-bottom: 50px;">${ttd.nama}<br>(Pihak Pertama)</p>
-              <img src="${ttd.ttdImage}" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />
-              <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${ttd.nama}</p>
-              <p style="font-size: 9px; color: #333; margin-top: 2px;">${ttd.jabatan}</p>
+              <p style="font-size: 9px; margin-bottom: 50px;">${ttd?.nama || "........................"}<br>(Pihak Pertama)</p>
+              ${ttd ? `<img src="${ttd.ttdImage}" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />` : `<div style="height: 50px;"></div>`}
+              <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${ttd?.nama || "........................"}</p>
+              <p style="font-size: 9px; color: #333; margin-top: 2px;">${ttd?.jabatan || ""}</p>
             </div>
           </div>
         </div>
@@ -731,16 +743,6 @@ export default function BapispPage() {
     );
   }
 
-  const piWithBA = piList.filter((pi) => {
-    const bast = getBastForPI(pi.nomorPI);
-    return bast && isBastOldEnough(bast);
-  });
-
-  const pendingBA = piList.filter((pi) => {
-    const bast = getBastForPI(pi.nomorPI);
-    return bast && !isBastOldEnough(bast);
-  });
-
   return (
     <div className="space-y-6">
       <Header
@@ -769,25 +771,17 @@ export default function BapispPage() {
           </button>
         </div>
 
-        {pendingBA.length > 0 && (
-          <div className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-            <p className="text-sm text-yellow-800">
-              <span className="font-semibold">{pendingBA.length} Berita Acara</span> belum dapat diakses (harus menunggu 1 hari setelah terbit).
-            </p>
-          </div>
-        )}
-
         {isLoading ? (
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-700"></div>
           </div>
-        ) : piWithBA.length === 0 ? (
+        ) : piList.filter((pi) => getBastForPI(pi.nomorPI)).length === 0 ? (
           <div className="flex flex-col items-center py-12 text-gray-400">
             <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="font-medium">Belum ada Berita Acara yang dapat diakses</p>
-            <p className="text-sm mt-1">Berita Acara akan tersedia 1 hari setelah diterbitkan</p>
+            <p className="font-medium">Belum ada Berita Acara yang tersedia</p>
+            <p className="text-sm mt-1">Berita Acara akan muncul setelah diterbitkan dari Riwayat Transaksi</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -805,9 +799,10 @@ export default function BapispPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {piWithBA.map((pi, idx) => {
+                {piList.filter((pi) => getBastForPI(pi.nomorPI)).map((pi, idx) => {
                   const bast = getBastForPI(pi.nomorPI);
                   const spCount = getSuratForPI(pi.nomorPI).length;
+                  const ttdAccessible = isTtdAccessible(pi.nomorPI);
                   const ttdStatus = getTtdStatus(bast);
                   return (
                     <tr key={pi.id} className="hover:bg-gray-50 transition-colors">
@@ -825,20 +820,32 @@ export default function BapispPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => handleOpenPrint(pi)}
-                          disabled={!bast}
-                          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 mx-auto ${
-                            bast
-                              ? "bg-indigo-600 hover:bg-indigo-700 text-white"
-                              : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                          }`}
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                          </svg>
-                          Print BAPISP
-                        </button>
+                        <div className="flex items-center gap-2 justify-center">
+                          <button
+                            onClick={() => handleOpenTtdModal(pi)}
+                            disabled={!ttdAccessible}
+                            title={ttdAccessible ? "Tambah / Ubah TTD" : "TTD tersedia 1 hari setelah SP terakhir"}
+                            className={`px-2 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
+                              ttdAccessible
+                                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                            }`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                            TTD
+                          </button>
+                          <button
+                            onClick={() => handlePrint(pi)}
+                            className="px-2 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                            Print
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -859,11 +866,11 @@ export default function BapispPage() {
             <Button variant="outline" onClick={() => setIsTtdModalOpen(false)}>Batal</Button>
             <Button
               variant="primary"
-              onClick={handlePrintBapisp}
+              onClick={handleSaveTtd}
               disabled={!selectedTtdId || isPrinting}
               isLoading={isPrinting}
             >
-              Print BAPISP
+              Simpan TTD
             </Button>
           </div>
         }

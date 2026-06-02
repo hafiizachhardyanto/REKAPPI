@@ -1560,8 +1560,8 @@ export default function RekapProformaInvoicePage() {
           .notes-section p { margin-bottom: 2px; }
           .signature-row { display: flex; justify-content: space-between; margin-top: auto; padding-top: 20px; }
           .signature-box { width: 45%; text-align: center; }
-          .signature-title { font-size: 9px; margin-bottom: 30px; }
-          .signature-img { max-height: 70px; width: auto; object-fit: contain; margin: 0 auto; display: block; }
+          .signature-title { font-size: 9px; margin-bottom: 45px; }
+          .signature-img { max-height: 105px; width: auto; object-fit: contain; margin: 0 auto; display: block; }
           .signature-name { font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block; }
           .footer-img { width: 100%; display: block; margin-top: auto; padding-top: 10px; }
           .print-btn { background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin: 10px; }
