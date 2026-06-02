@@ -306,6 +306,15 @@ export default function BapispPage() {
     });
   };
 
+  const isBastOldEnough = (bast: BeritaAcaraData | undefined) => {
+    if (!bast || !bast.createdAt) return false;
+    const created = bast.createdAt instanceof Date ? bast.createdAt : new Date(bast.createdAt);
+    const now = new Date();
+    const diffTime = now.getTime() - created.getTime();
+    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    return diffDays >= 1;
+  };
+
   const getTtdStatus = (bast: BeritaAcaraData | undefined) => {
     if (!bast) return { label: "Belum Ada BA", color: "bg-gray-100 text-gray-500" };
     if (bast.ttdId && bast.ttdNama) {
@@ -588,7 +597,7 @@ export default function BapispPage() {
         <tr>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${idx + 1}</td>
           ${!isGI ? `<td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorSubDO || "-"}</td>` : ""}
-          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${isGI ? (it.nomorPI || piDisplay || "-") : (it.nomorPO || "-")}</td>
+          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${isGI ? (piDisplay || "-") : (it.nomorPO || "-")}</td>
           <td style="padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600;">${it.jenisPupuk || ""}</td>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.party || "-"}</td>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.pengambilanZAK || "-"} ZAK</td>
@@ -722,7 +731,15 @@ export default function BapispPage() {
     );
   }
 
-  const piWithBA = piList.filter((pi) => getBastForPI(pi.nomorPI));
+  const piWithBA = piList.filter((pi) => {
+    const bast = getBastForPI(pi.nomorPI);
+    return bast && isBastOldEnough(bast);
+  });
+
+  const pendingBA = piList.filter((pi) => {
+    const bast = getBastForPI(pi.nomorPI);
+    return bast && !isBastOldEnough(bast);
+  });
 
   return (
     <div className="space-y-6">
@@ -752,6 +769,14 @@ export default function BapispPage() {
           </button>
         </div>
 
+        {pendingBA.length > 0 && (
+          <div className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+            <p className="text-sm text-yellow-800">
+              <span className="font-semibold">{pendingBA.length} Berita Acara</span> belum dapat diakses (harus menunggu 1 hari setelah terbit).
+            </p>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-700"></div>
@@ -761,8 +786,8 @@ export default function BapispPage() {
             <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="font-medium">Belum ada Berita Acara yang terbit</p>
-            <p className="text-sm mt-1">Buat Berita Acara terlebih dahulu di menu Rekap PI</p>
+            <p className="font-medium">Belum ada Berita Acara yang dapat diakses</p>
+            <p className="text-sm mt-1">Berita Acara akan tersedia 1 hari setelah diterbitkan</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

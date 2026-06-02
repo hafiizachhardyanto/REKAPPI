@@ -210,11 +210,12 @@ export default function RekapProformaInvoicePage() {
     tanggalPembayaran: "",
     statusPelunasan: "",
   });
-
   const [isBastModalOpen, setIsBastModalOpen] = useState(false);
   const [bastTTDId, setBastTTDId] = useState("");
   const [bastNomorSeri, setBastNomorSeri] = useState("");
   const [isGeneratingBast, setIsGeneratingBast] = useState(false);
+  const [bastExists, setBastExists] = useState(false);
+  const [invoiceExists, setInvoiceExists] = useState(false);
 
   const [editForm, setEditForm] = useState({
     tanggal: "",
@@ -246,6 +247,16 @@ export default function RekapProformaInvoicePage() {
     fetchExistingSurat();
     fetchTTD();
   }, []);
+
+  useEffect(() => {
+    if (selectedItem) {
+      checkBastExists(selectedItem.nomorPI);
+      checkInvoiceExists(selectedItem.nomorPI);
+    } else {
+      setBastExists(false);
+      setInvoiceExists(false);
+    }
+  }, [selectedItem]);
 
   const fetchData = async () => {
     try {
@@ -338,6 +349,35 @@ export default function RekapProformaInvoicePage() {
     }
   };
 
+  const checkBastExists = async (nomorPI: string) => {
+    try {
+      const q = query(collection(db, "beritaAcara"), where("nomorPI", "==", nomorPI));
+      const snap = await getDocs(q);
+      setBastExists(!snap.empty);
+    } catch {
+      setBastExists(false);
+    }
+  };
+
+  const checkInvoiceExists = async (nomorPI: string) => {
+    try {
+      const piRow = data.find((d) => d.nomorPI === nomorPI);
+      if (piRow && piRow.invoiceBaseNumber) {
+        setInvoiceExists(true);
+        return;
+      }
+      const suratQ = query(collection(db, "suratPengangkutan"), where("nomorPI", "==", nomorPI));
+      const suratSnap = await getDocs(suratQ);
+      let hasInvoice = false;
+      suratSnap.forEach((d) => {
+        if (d.data().nomorInvoice) hasInvoice = true;
+      });
+      setInvoiceExists(hasInvoice);
+    } catch {
+      setInvoiceExists(false);
+    }
+  };
+
   const getNextBastNumber = async (): Promise<string> => {
     const now = new Date();
     const year = now.getFullYear();
@@ -391,13 +431,18 @@ export default function RekapProformaInvoicePage() {
 
   const fetchSuratMuat = async () => {
     try {
-      const q = query(collection(db, "suratPengangkutan"), where("jenisSurat", "==", "gudangInduk"));
+      const q = query(collection(db, "suratPengangkutan"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
       const map: Record<string, SuratMuatInfo[]> = {};
       snapshot.docs.forEach((docSnap) => {
         const d = docSnap.data();
         const rawPI = d.nomorPI;
-        const piList: string[] = d.nomorPIList || (rawPI ? (Array.isArray(rawPI) ? rawPI : [rawPI]) : []);
+        const piList: string[] = [];
+        if (Array.isArray(rawPI)) {
+          rawPI.forEach((p) => { if (p && typeof p === "string") piList.push(p); });
+        } else if (rawPI && typeof rawPI === "string") {
+          piList.push(rawPI);
+        }
         const info: SuratMuatInfo = {
           id: docSnap.id,
           nomorSeri: d.nomorSeri || "",
@@ -430,7 +475,22 @@ export default function RekapProformaInvoicePage() {
   };
 
   const getSuratMuatForPI = (nomorPI: string): SuratMuatInfo[] => {
-    return suratMuatMap[nomorPI] || [];
+    const results: SuratMuatInfo[] = [];
+    Object.values(suratMuatMap).forEach((list) => {
+      list.forEach((surat) => {
+        const rawPI = surat.nomorPI;
+        let match = false;
+        if (Array.isArray(rawPI)) {
+          match = rawPI.includes(nomorPI);
+        } else if (typeof rawPI === "string") {
+          match = rawPI === nomorPI;
+        }
+        if (match && !results.find((r) => r.id === surat.id)) {
+          results.push(surat);
+        }
+      });
+    });
+    return results;
   };
 
   const getTotalOrdered = (item: ProformaInvoice) => {
@@ -641,6 +701,46 @@ export default function RekapProformaInvoicePage() {
       console.error(error);
     } finally {
       setIsGeneratingInvoice(false);
+    }
+  };
+
+  const handleResetBast = async (nomorPI: string) => {
+    if (!confirm("Reset Berita Acara? Nomor seri akan dikembalikan ke pool.")) return;
+    try {
+      const q = query(collection(db, "beritaAcara"), where("nomorPI", "==", nomorPI));
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        await deleteDoc(doc(db, "beritaAcara", d.id));
+      }
+      setBastExists(false);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleResetInvoice = async (nomorPI: string) => {
+    if (!confirm("Reset Invoice? Nomor seri akan dikembalikan ke pool.")) return;
+    try {
+      const piRow = data.find((d) => d.nomorPI === nomorPI);
+      if (piRow) {
+        await updateDoc(doc(db, "proformaInvoice", piRow.id), {
+          invoiceBaseNumber: null,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      const suratQ = query(collection(db, "suratPengangkutan"), where("nomorPI", "==", nomorPI));
+      const suratSnap = await getDocs(suratQ);
+      for (const d of suratSnap.docs) {
+        await updateDoc(doc(db, "suratPengangkutan", d.id), {
+          nomorInvoice: null,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      setInvoiceExists(false);
+      fetchData();
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -941,10 +1041,59 @@ export default function RekapProformaInvoicePage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus data ini?")) return;
+    if (!confirm("Apakah Anda yakin ingin menghapus data ini? Semua surat pengangkutan, berita acara, dan invoice terkait juga akan dihapus.")) return;
     try {
+      const piDoc = data.find((d) => d.id === id);
+      if (!piDoc) return;
+      const nomorPI = piDoc.nomorPI;
+
+      const suratQuery = query(collection(db, "suratPengangkutan"), where("nomorPI", "==", nomorPI));
+      const suratSnapshot = await getDocs(suratQuery);
+      for (const suratDoc of suratSnapshot.docs) {
+        const suratData = suratDoc.data();
+        const items = suratData.items || [];
+        for (const item of items) {
+          const stock = getStockForProduct(item.jenisPupuk);
+          if (stock) {
+            const stockRef = doc(db, "stockGudang", stock.id);
+            const stockSnap = await getDoc(stockRef);
+            if (stockSnap.exists()) {
+              const sData = stockSnap.data();
+              const zak = parseFloat(String(item.pengambilanZAK)) || 0;
+              const bobot = item.bobotPerUnit || stock.bobotPerUnit || 50;
+              const kg = zak * bobot;
+              const currentUnit = sData.stokAkhirUnit || 0;
+              const currentKG = sData.stokAkhirKG || 0;
+              const currentKeluarUnit = sData.barangKeluarUnit || 0;
+              const currentKeluarKG = sData.barangKeluarKG || 0;
+              await updateDoc(stockRef, {
+                stokAkhirUnit: currentUnit + zak,
+                stokAkhirKG: currentKG + kg,
+                barangKeluarUnit: Math.max(0, currentKeluarUnit - zak),
+                barangKeluarKG: Math.max(0, currentKeluarKG - kg),
+                updatedAt: serverTimestamp(),
+              });
+            }
+          }
+        }
+        const transaksiQuery = query(collection(db, "transaksiBarangKeluar"), where("nomorSeri", "==", suratData.nomorSeri));
+        const transaksiSnapshot = await getDocs(transaksiQuery);
+        for (const transaksiDoc of transaksiSnapshot.docs) {
+          await deleteDoc(doc(db, "transaksiBarangKeluar", transaksiDoc.id));
+        }
+        await deleteDoc(doc(db, "suratPengangkutan", suratDoc.id));
+      }
+
+      const baQuery = query(collection(db, "beritaAcara"), where("nomorPI", "==", nomorPI));
+      const baSnapshot = await getDocs(baQuery);
+      for (const baDoc of baSnapshot.docs) {
+        await deleteDoc(doc(db, "beritaAcara", baDoc.id));
+      }
+
       await deleteDoc(doc(db, "proformaInvoice", id));
       fetchData();
+      fetchSuratMuat();
+      fetchStockGudang();
     } catch (error) {
       console.error(error);
     }
@@ -1135,6 +1284,7 @@ export default function RekapProformaInvoicePage() {
         items: bastItems,
         createdAt: serverTimestamp(),
       });
+      setBastExists(true);
     } catch (error) {
       console.error(error);
     }
@@ -2215,18 +2365,35 @@ export default function RekapProformaInvoicePage() {
                 <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs text-indigo-600 uppercase tracking-wide font-semibold">Berita Acara Serah Terima</p>
-                    <span className="px-2 py-1 rounded-md text-xs font-bold bg-indigo-100 text-indigo-700">Siap Dibuat</span>
+                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${bastExists ? "bg-green-100 text-green-700" : "bg-indigo-100 text-indigo-700"}`}>
+                      {bastExists ? "Sudah Terbit" : "Siap Dibuat"}
+                    </span>
                   </div>
-                  <p className="text-sm text-gray-700 mb-3">Seluruh muatan telah selesai dimuat. Buat Berita Acara Serah Terima Barang.</p>
-                  <button
-                    onClick={() => handleOpenBast(selectedItem)}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Buat Berita Acara
-                  </button>
+                  <p className="text-sm text-gray-700 mb-3">Seluruh muatan telah selesai dimuat. {bastExists ? "Berita Acara sudah dibuat." : "Buat Berita Acara Serah Terima Barang."}</p>
+                  <div className="flex gap-2">
+                    {!bastExists && (
+                      <button
+                        onClick={() => handleOpenBast(selectedItem)}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Buat Berita Acara
+                      </button>
+                    )}
+                    {bastExists && (
+                      <button
+                        onClick={() => handleResetBast(selectedItem.nomorPI)}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Reset BA
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : null;
             })()}
@@ -2602,6 +2769,11 @@ export default function RekapProformaInvoicePage() {
 
       <Modal isOpen={isInvoiceModalOpen} onClose={() => setIsInvoiceModalOpen(false)} title="Print Invoice" size="md" footer={
         <div className="flex justify-end gap-3">
+          {invoiceExists && (
+            <Button variant="danger" onClick={() => { if (selectedItem) handleResetInvoice(selectedItem.nomorPI); setIsInvoiceModalOpen(false); }}>
+              Reset Invoice
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setIsInvoiceModalOpen(false)}>Batal</Button>
           <Button variant="primary" onClick={handlePrintInvoice} disabled={!selectedOrderTTD || !invoiceNomor || isGeneratingInvoice}>Print Invoice</Button>
         </div>
