@@ -365,7 +365,6 @@ export default function SuratPengangkutanPage() {
     });
   };
 
-
   const isProductAlreadySelected = (currentItemId: number, nomorPI: string, namaProduk: string) => {
     return items.find((it) =>
       it.id !== currentItemId &&
@@ -847,19 +846,32 @@ export default function SuratPengangkutanPage() {
       )
       .join("");
     const piNumbers = items.map((it) => it.nomorPI).filter((v, i, a) => a.indexOf(v) === i).join(", ");
-    const recipientBox = jenisSurat === "gudangInduk"
-      ? `<div class="recipient-box">
-              <p class="recipient-title">Kepada Yth :</p>
-              <p class="recipient-name">Bapak Kepala Gudang Induk</p>
-              <p class="recipient-name">PT Bukit Agrochemical Baru</p>
-              <p class="recipient-address">Desa Sungai Rangit<br>Pangkalan Lada, Kalimantan Tengah</p>
-            </div>`
-      : `<div class="recipient-box">
-              <p class="recipient-title">Kepada Yth :</p>
-              <p class="recipient-name">${formData.kepadaNama || items[0]?.namaCustomer || ""}</p>
-              <p class="recipient-name">${formData.kepadaPerusahaan || items[0]?.namaCustomer || ""}</p>
-              <p class="recipient-address">${(formData.kepadaAlamat || "").replace(/\n/g, "<br>")}</p>
-            </div>`;
+
+    let recipientBox = "";
+    if (jenisSurat === "gudangInduk") {
+      recipientBox = `<div class="recipient-box">
+        <p class="recipient-title">Kepada Yth :</p>
+        <p class="recipient-name">Bapak Kepala Gudang Induk</p>
+        <p class="recipient-name">PT Bukit Agrochemical Baru</p>
+        <p class="recipient-address">Desa Sungai Rangit<br>Pangkalan Lada, Kalimantan Tengah</p>
+      </div>`;
+    } else if (isDikuasakan) {
+      const firstItem = items.find((it) => it.nomorPI.trim() !== "");
+      const customerName = firstItem?.namaCustomer || "";
+      recipientBox = `<div class="recipient-box">
+        <p class="recipient-title">Kepada Yth :</p>
+        <p class="recipient-name">${customerName}</p>
+        <p class="recipient-name">${customerName}</p>
+      </div>`;
+    } else {
+      recipientBox = `<div class="recipient-box">
+        <p class="recipient-title">Kepada Yth :</p>
+        <p class="recipient-name">${formData.kepadaNama || ""}</p>
+        <p class="recipient-name">${formData.kepadaPerusahaan || ""}</p>
+        <p class="recipient-address">${(formData.kepadaAlamat || "").replace(/\n/g, "<br>")}</p>
+      </div>`;
+    }
+
     const html = `
       <!DOCTYPE html>
       <html>

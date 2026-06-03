@@ -57,6 +57,10 @@ interface SuratMuatInfo {
   nomorSIM?: string;
   jenisSurat?: string;
   subJenisDO?: string;
+  kepadaNama?: string;
+  kepadaPerusahaan?: string;
+  kepadaAlamat?: string;
+  namaCustomer?: string | string[];
 }
 
 interface ProformaInvoice {
@@ -460,6 +464,8 @@ export default function RekapProformaInvoicePage() {
         } else if (rawPI && typeof rawPI === "string") {
           piList.push(rawPI);
         }
+        const rawCustomer = d.namaCustomer;
+        const firstCustomer = Array.isArray(rawCustomer) ? rawCustomer[0] : rawCustomer;
         const info: SuratMuatInfo = {
           id: docSnap.id,
           nomorSeri: d.nomorSeri || "",
@@ -472,6 +478,10 @@ export default function RekapProformaInvoicePage() {
           nomorSIM: d.nomorSIM || "",
           jenisSurat: d.jenisSurat || "gudangInduk",
           subJenisDO: d.subJenisDO || null,
+          kepadaNama: d.kepadaNama || firstCustomer || "",
+          kepadaPerusahaan: d.kepadaPerusahaan || firstCustomer || "",
+          kepadaAlamat: d.kepadaAlamat || "",
+          namaCustomer: rawCustomer || "",
         };
         piList.forEach((pi) => {
           if (!map[pi]) map[pi] = [];
@@ -1077,23 +1087,24 @@ export default function RekapProformaInvoicePage() {
       const bastItems: BeritaAcaraItem[] = [];
       let no = 1;
       suratList.forEach((surat) => {
-        (surat.items || []).forEach((it) => {
+        const suratItems = (surat.items || []).filter((it) => {
           const itemPI = it.nomorPI || "";
-          if (itemPI && itemPI !== item.nomorPI) return;
-          const piProd = item.produkItems.find((p) =>
-            p.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase()) ||
-            it.jenisPupuk.toUpperCase().includes(p.namaProduk.toUpperCase())
-          );
-          bastItems.push({
-            no: no++,
-            tanggalMuat: surat.tanggal,
-            namaProduk: piProd?.namaProduk || it.jenisPupuk || "",
-            fot: piProd?.fot || "",
-            qty: `${it.pengambilanZAK || 0} ZAK`,
-            noSJ: surat.nomorSeri,
-            driver: surat.driverUnit || "",
-            nopol: surat.nomorPolisi || "",
-          });
+          return !itemPI || itemPI === item.nomorPI;
+        });
+        if (suratItems.length === 0) return;
+        const totalZAK = suratItems.reduce((sum, it) => sum + (it.pengambilanZAK || 0), 0);
+        const produkNames = suratItems.map((it) => it.jenisPupuk).filter(Boolean).join(", ");
+        const fotSet = new Set(suratItems.map((it) => it.fot || "").filter(Boolean));
+        const fot = Array.from(fotSet).join(", ");
+        bastItems.push({
+          no: no++,
+          tanggalMuat: surat.tanggal,
+          namaProduk: produkNames,
+          fot: fot,
+          qty: `${totalZAK} ZAK`,
+          noSJ: surat.nomorSeri,
+          driver: surat.driverUnit || "",
+          nopol: surat.nomorPolisi || "",
         });
       });
       const q1 = query(collection(db, "beritaAcara"), where("nomorPI", "==", item.nomorPI));
@@ -1518,6 +1529,8 @@ export default function RekapProformaInvoicePage() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
     const isGI = !surat.jenisSurat || surat.jenisSurat === "gudangInduk";
+    const isMandiri = surat.jenisSurat === "do" && surat.subJenisDO === "mandiri";
+    const isDikuasakan = surat.jenisSurat === "do" && surat.subJenisDO === "dikuasakan";
     const piDisplay = Array.isArray(surat.nomorPI) ? surat.nomorPI.join(", ") : surat.nomorPI;
     const itemsHtml = (surat.items || [])
       .map(
@@ -1525,7 +1538,7 @@ export default function RekapProformaInvoicePage() {
         <tr>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${idx + 1}</td>
           ${!isGI ? `<td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.nomorSubDO || "-"}</td>` : ""}
-          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${isGI ? (it.nomorPI || piDisplay || "-") : (it.nomorPO || "-")}</td>
+          <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${isGI || isDikuasakan ? (it.nomorPI || piDisplay || "-") : (it.nomorPO || "-")}</td>
           <td style="padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600;">${it.jenisPupuk || ""}</td>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.party || "-"}</td>
           <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.pengambilanZAK || "-"} ZAK</td>
@@ -1534,6 +1547,31 @@ export default function RekapProformaInvoicePage() {
       `
       )
       .join("");
+
+    let recipientBox = "";
+    if (isGI) {
+      recipientBox = `<div class="recipient-box">
+        <p class="recipient-title">Kepada Yth :</p>
+        <p class="recipient-name">Bapak Kepala Gudang Induk</p>
+        <p class="recipient-name">PT Bukit Agrochemical Baru</p>
+        <p class="recipient-address">Desa Sungai Rangit<br>Pangkalan Lada, Kalimantan Tengah</p>
+      </div>`;
+    } else if (isDikuasakan) {
+      const customerName = Array.isArray(surat.namaCustomer) ? surat.namaCustomer[0] : surat.namaCustomer;
+      recipientBox = `<div class="recipient-box">
+        <p class="recipient-title">Kepada Yth :</p>
+        <p class="recipient-name">${customerName || ""}</p>
+        <p class="recipient-name">${customerName || ""}</p>
+      </div>`;
+    } else {
+      recipientBox = `<div class="recipient-box">
+        <p class="recipient-title">Kepada Yth :</p>
+        <p class="recipient-name">${surat.kepadaNama || ""}</p>
+        <p class="recipient-name">${surat.kepadaPerusahaan || ""}</p>
+        <p class="recipient-address">${(surat.kepadaAlamat || "").replace(/\n/g, "<br>")}</p>
+      </div>`;
+    }
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -1589,12 +1627,7 @@ export default function RekapProformaInvoicePage() {
               <span class="info-label">Nomor Seri : ${surat.nomorSeri}</span>
             </div>
           </div>
-          <div class="recipient-box">
-            <p class="recipient-title">Kepada Yth :</p>
-            <p class="recipient-name">Bapak Kepala Gudang Induk</p>
-            <p class="recipient-name">PT Bukit Agrochemical Baru</p>
-            <p class="recipient-address">Desa Sungai Rangit<br>Pangkalan Lada, Kalimantan Tengah</p>
-          </div>
+          ${recipientBox}
           <div class="salutation">
             <p>Dengan Hormat,</p>
             <p>Dengan ini mohon dimuatkan pupuk dengan rincian sebagai berikut :</p>
