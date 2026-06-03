@@ -588,19 +588,29 @@ export default function BeritaAcaraPage() {
               <tbody>${baRowsHtml}</tbody>
             </table>
             <p style="margin-bottom: 16px; font-size: 10px; text-align: justify;">Demikian berita acara serah terima barang ini diperbuat oleh kedua belah pihak, adapun barang-barang tersebut dalam keadaan baik dan cukup, sejak penandatanganan berita acara ini, maka barang-barang tersebut menjadi tanggung jawab pihak kedua.</p>
-            <div style="display: flex; justify-content: space-between; margin-top: 30px;">
-              <div style="width: 45%; text-align: center;">
-                <p style="font-size: 9px; margin-bottom: 50px;">${pi.namaCustomer}<br>(Pihak Kedua)</p>
-                <div style="height: 50px;"></div>
-                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${pi.namaCustomer}</p>
-              </div>
-              <div style="width: 45%; text-align: center;">
-                <p style="font-size: 9px; margin-bottom: 50px;">PT Bukit Agrochemical Baru<br>(Pihak Pertama)</p>
-                <div style="min-height: 60px; margin-bottom: 4px; display: flex; align-items: flex-end; justify-content: center;">
-                  ${ttd?.ttdImage ? `<img src="${ttd.ttdImage}" style="max-height: 50px; object-fit: contain; display: block;" />` : `<div style="min-height: 50px;"></div>`}
+            <div style="display: flex; justify-content: space-between; margin-top: 40px; align-items: flex-end;">
+              <div style="width: 45%; text-align: center; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
+                <p style="font-size: 10px; font-weight: 700; margin-bottom: 8px;">PIHAK KEDUA</p>
+                <p style="font-size: 10px; font-weight: 600; margin-bottom: 60px;">${pi.namaCustomer || ""}</p>
+                <div style="position: relative; width: 100%; min-height: 70px; margin-bottom: 8px; display: flex; align-items: flex-end; justify-content: center;">
+                  <img src="/LogoAGRO.png" alt="Stempel" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-height: 80px; max-width: 100px; opacity: 0.25; object-fit: contain; z-index: 1;" onerror="this.style.display='none'" />
+                  <div style="position: relative; z-index: 2;">
+                    ${ttd?.ttdImage ? `<img src="${ttd.ttdImage}" style="max-height: 70px; max-width: 140px; object-fit: contain; display: block; margin: 0 auto;" />` : `<div style="min-height: 70px;"></div>`}
+                  </div>
                 </div>
-                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${ttd?.nama || "_________________"}</p>
-                <p style="font-size: 9px; color: #333; margin-top: 2px;">${ttd?.jabatan || "PT Bukit Agrochemical Baru"}</p>
+                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; display: block; width: 90%; margin-left: auto; margin-right: auto;">${pi.namaCustomer || "_________________"}</p>
+              </div>
+              <div style="width: 45%; text-align: center; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
+                <p style="font-size: 10px; font-weight: 700; margin-bottom: 8px;">PIHAK PERTAMA</p>
+                <p style="font-size: 10px; font-weight: 600; margin-bottom: 60px;">PT Bukit Agrochemical Baru</p>
+                <div style="position: relative; width: 100%; min-height: 70px; margin-bottom: 8px; display: flex; align-items: flex-end; justify-content: center;">
+                  <img src="/LogoAGRO.png" alt="Stempel" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-height: 80px; max-width: 100px; opacity: 0.25; object-fit: contain; z-index: 1;" onerror="this.style.display='none'" />
+                  <div style="position: relative; z-index: 2;">
+                    ${ttd?.ttdImage ? `<img src="${ttd.ttdImage}" style="max-height: 70px; max-width: 140px; object-fit: contain; display: block; margin: 0 auto;" />` : `<div style="min-height: 70px;"></div>`}
+                  </div>
+                </div>
+                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; display: block; width: 90%; margin-left: auto; margin-right: auto;">${ttd?.nama || "_________________"}</p>
+                <p style="font-size: 9px; color: #333; margin-top: 3px;">${ttd?.jabatan || "PT Bukit Agrochemical Baru"}</p>
               </div>
             </div>
           </div>

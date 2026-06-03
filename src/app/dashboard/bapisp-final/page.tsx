@@ -377,7 +377,7 @@ export default function BapispFinalPage() {
 
       spHtml += `
         <div style="page-break-before: always;">
-          <img src="/Picture3.png" alt="Header" style="width: 100%; display: block; margin-bottom: 0;" onerror="this.style.display='none'" />
+          <img src="/Picture3.png" alt="Header" style="width: 100%; display: block; margin-bottom: 0;" onerror="this.style.display=\'none\'" />
           <div style="text-align: center; background: #15803d; color: white; padding: 8px 0; margin: 8px 0 12px 0; font-weight: bold; font-size: 14px; letter-spacing: 2px; -webkit-print-color-adjust: exact; print-color-adjust: exact;">SURAT PENGANGKUTAN</div>
           <div style="margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px;">
@@ -438,7 +438,7 @@ export default function BapispFinalPage() {
             <div style="width: 45%; text-align: center; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
               <p style="font-size: 9px; margin-bottom: 4px; min-height: 28px; line-height: 1.4;">Hormat Kami,<br>PT. BUKIT AGROCHEMICAL BARU</p>
               <div style="min-height: 60px; margin-bottom: 4px; display: flex; align-items: flex-end; justify-content: center;">
-                <img src="/Picture2.png" alt="TTD" style="max-height: 60px; width: auto; object-fit: contain; margin: 0 auto 4px auto; display: block;" onerror="this.style.display='none'" />
+                <img src="/Picture2.png" alt="TTD" style="max-height: 60px; width: auto; object-fit: contain; margin: 0 auto 4px auto; display: block;" onerror="this.style.display=\'none\'" />
               </div>
               <p style="font-size: 10px; font-weight: 700; margin-top: 0; border-top: 1px solid #000; padding-top: 3px; display: block; width: 90%; margin-left: auto; margin-right: auto;">HENDRA PRAMASYANTO</p>
             </div>
@@ -448,10 +448,14 @@ export default function BapispFinalPage() {
               <p style="font-size: 10px; font-weight: 700; margin-top: 0; border-top: 1px solid #000; padding-top: 3px; display: block; width: 90%; margin-left: auto; margin-right: auto;">${surat.driverUnit || ""}</p>
             </div>
           </div>
-          <img src="/Picture1.png" alt="Footer" style="width: 100%; display: block; margin-top: auto; padding-top: 10px;" onerror="this.style.display='none'" />
+          <img src="/Picture1.png" alt="Footer" style="width: 100%; display: block; margin-top: auto; padding-top: 10px;" onerror="this.style.display=\'none\'" />
         </div>
       `;
     });
+
+    const ttdImageHtml = ttd?.ttdImage
+      ? `<img src="${ttd.ttdImage}" style="max-height: 70px; max-width: 140px; object-fit: contain; display: block; margin: 0 auto; position: relative; z-index: 2;" />`
+      : `<div style="min-height: 70px;"></div>`;
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -479,7 +483,7 @@ export default function BapispFinalPage() {
         </div>
 
         <div class="doc-page">
-          <img src="/Picture3.png" alt="Header" style="width: 100%; display: block; margin-bottom: 0;" onerror="this.style.display='none'" />
+          <img src="/Picture3.png" alt="Header" style="width: 100%; display: block; margin-bottom: 0;" onerror="this.style.display=\'none\'" />
           <div style="text-align: center; margin: 8px 0 12px 0;">
             <h1 style="font-size: 14px; font-weight: bold; letter-spacing: 1px; margin-bottom: 4px; text-decoration: underline;">BERITA ACARA SERAH TERIMA BARANG</h1>
             <p style="font-size: 11px; font-weight: 600;">${ba.nomorSeri}</p>
@@ -518,30 +522,42 @@ export default function BapispFinalPage() {
               <tbody>${baRowsHtml}</tbody>
             </table>
             <p style="margin-bottom: 16px; font-size: 10px; text-align: justify;">Demikian berita acara serah terima barang ini diperbuat oleh kedua belah pihak, adapun barang-barang tersebut dalam keadaan baik dan cukup, sejak penandatanganan berita acara ini, maka barang-barang tersebut menjadi tanggung jawab pihak kedua.</p>
-            <div style="display: flex; justify-content: space-between; margin-top: 30px;">
-              <div style="width: 45%; text-align: center;">
-                <p style="font-size: 9px; margin-bottom: 50px;">${pi.namaCustomer}<br>(Pihak Kedua)</p>
-                <div style="height: 50px;"></div>
-                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${pi.namaCustomer}</p>
-              </div>
-              <div style="width: 45%; text-align: center;">
-                <p style="font-size: 9px; margin-bottom: 50px;">PT Bukit Agrochemical Baru<br>(Pihak Pertama)</p>
-                <div style="min-height: 60px; margin-bottom: 4px; display: flex; align-items: flex-end; justify-content: center;">
-                  ${ttd?.ttdImage ? `<img src="${ttd.ttdImage}" style="max-height: 50px; object-fit: contain; display: block;" />` : `<div style="min-height: 50px;"></div>`}
+
+            <div style="display: flex; justify-content: space-between; margin-top: 40px; align-items: flex-end;">
+              <div style="width: 45%; text-align: center; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
+                <p style="font-size: 10px; font-weight: 700; margin-bottom: 8px;">PIHAK KEDUA</p>
+                <p style="font-size: 10px; font-weight: 600; margin-bottom: 60px;">${pi.namaCustomer || ""}</p>
+                <div style="position: relative; width: 100%; min-height: 70px; margin-bottom: 8px; display: flex; align-items: flex-end; justify-content: center;">
+                  <img src="/LogoAGRO.png" alt="Stempel" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-height: 80px; max-width: 100px; opacity: 0.25; object-fit: contain; z-index: 1;" onerror="this.style.display=\'none\'" />
+                  <div style="position: relative; z-index: 2;">
+                    ${ttdImageHtml}
+                  </div>
                 </div>
-                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${ttd?.nama || "_________________"}</p>
-                <p style="font-size: 9px; color: #333; margin-top: 2px;">${ttd?.jabatan || "PT Bukit Agrochemical Baru"}</p>
+                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; display: block; width: 90%; margin-left: auto; margin-right: auto;">${pi.namaCustomer || "_________________"}</p>
+              </div>
+              <div style="width: 45%; text-align: center; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;">
+                <p style="font-size: 10px; font-weight: 700; margin-bottom: 8px;">PIHAK PERTAMA</p>
+                <p style="font-size: 10px; font-weight: 600; margin-bottom: 60px;">PT Bukit Agrochemical Baru</p>
+                <div style="position: relative; width: 100%; min-height: 70px; margin-bottom: 8px; display: flex; align-items: flex-end; justify-content: center;">
+                  <img src="/LogoAGRO.png" alt="Stempel" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-height: 80px; max-width: 100px; opacity: 0.25; object-fit: contain; z-index: 1;" onerror="this.style.display=\'none\'" />
+                  <div style="position: relative; z-index: 2;">
+                    ${ttdImageHtml}
+                  </div>
+                </div>
+                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; display: block; width: 90%; margin-left: auto; margin-right: auto;">${ttd?.nama || "_________________"}</p>
+                <p style="font-size: 9px; color: #333; margin-top: 3px;">${ttd?.jabatan || "PT Bukit Agrochemical Baru"}</p>
               </div>
             </div>
+
           </div>
         </div>
 
         <div class="page-break"></div>
 
         <div class="doc-page-pi" style="page-break-before: always;">
-          <img src="/LogoAGRO.png" alt="Watermark" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: auto; opacity: 0.08; pointer-events: none; z-index: 0;" onerror="this.style.display='none'" />
+          <img src="/LogoAGRO.png" alt="Watermark" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: auto; opacity: 0.08; pointer-events: none; z-index: 0;" onerror="this.style.display=\'none\'" />
           <div style="position: relative; z-index: 1;">
-            <img src="/logo.png" alt="Header" style="width: 100%; display: block; margin-bottom: 0;" onerror="this.style.display='none'; this.parentElement.insertAdjacentHTML('afterbegin', '<div style=text-align:center;padding:10px;border:1px solid #ccc;margin-bottom:10px;>Logo tidak tersedia</div>');" />
+            <img src="/logo.png" alt="Header" style="width: 100%; display: block; margin-bottom: 0;" onerror="this.style.display=\'none\'; this.parentElement.insertAdjacentHTML(\'afterbegin\', \'<div style=text-align:center;padding:10px;border:1px solid #ccc;margin-bottom:10px;>Logo tidak tersedia</div>\');" />
             <div style="text-align: center; margin: 8px 0 10px 0; padding: 5px 0; background: #dcfce7; border-top: 2px solid #16a34a; border-bottom: 2px solid #16a34a; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
               <h1 style="color: #111; font-size: 15px; margin: 0; font-weight: bold; letter-spacing: 3px;">PROFORMA INVOICE</h1>
             </div>
