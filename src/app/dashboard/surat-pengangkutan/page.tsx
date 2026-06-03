@@ -363,6 +363,15 @@ export default function SuratPengangkutanPage() {
     });
   };
 
+
+  const isProductAlreadySelected = (currentItemId: number, nomorPI: string, namaProduk: string) => {
+    return items.find((it) =>
+      it.id !== currentItemId &&
+      it.nomorPI === nomorPI &&
+      it.jenisPupuk === namaProduk
+    );
+  };
+
   const handlePISelectForItem = async (itemId: number, pi: ProformaInvoice) => {
     setPiShowMap((prev) => ({ ...prev, [itemId]: false }));
     setPiSearchMap((prev) => ({ ...prev, [itemId]: pi.nomorPI }));
@@ -1235,16 +1244,30 @@ export default function SuratPengangkutanPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                           {validProducts.map((prod, pidx) => {
                             const isSelected = item.jenisPupuk === prod.namaProduk;
+                            const alreadySelectedItem = isProductAlreadySelected(item.id, selectedPI.nomorPI, prod.namaProduk);
+                            const isDisabled = !!alreadySelectedItem;
                             return (
                               <button
                                 key={pidx}
                                 type="button"
-                                onClick={() => handleProdukSelectForItem(item.id, selectedPI, pidx)}
-                                className={`p-3 rounded-lg border text-left transition-all ${isSelected ? "bg-green-100 border-green-500 ring-1 ring-green-500" : "bg-white border-gray-200 hover:border-green-300"}`}
+                                onClick={() => {
+                                  if (!isDisabled) handleProdukSelectForItem(item.id, selectedPI, pidx);
+                                }}
+                                disabled={isDisabled}
+                                className={`p-3 rounded-lg border text-left transition-all ${
+                                  isSelected
+                                    ? "bg-green-100 border-green-500 ring-1 ring-green-500"
+                                    : isDisabled
+                                    ? "bg-gray-100 border-gray-300 cursor-not-allowed opacity-60"
+                                    : "bg-white border-gray-200 hover:border-green-300"
+                                }`}
                               >
-                                <p className="font-semibold text-sm text-gray-800">{prod.namaProduk}</p>
+                                <p className={`font-semibold text-sm ${isDisabled ? "text-gray-500" : "text-gray-800"}`}>{prod.namaProduk}</p>
                                 <p className="text-xs text-gray-500">FOT: {prod.fot || "-"}</p>
                                 <p className="text-xs text-gray-500">Order: {prod.kuantitas?.toLocaleString()} KG</p>
+                                {isDisabled && (
+                                  <p className="text-xs text-red-500 mt-1 font-medium">Sudah dipilih di Item {items.findIndex((it) => it.id === alreadySelectedItem!.id) + 1}</p>
+                                )}
                               </button>
                             );
                           })}
