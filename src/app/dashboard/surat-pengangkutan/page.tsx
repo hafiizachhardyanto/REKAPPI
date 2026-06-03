@@ -355,16 +355,19 @@ export default function SuratPengangkutanPage() {
 
       const allSuratDocs: any[] = [];
 
-      const q1 = query(
-        collection(db, "suratPengangkutan"),
-        where("nomorPI", "in", allNomorPIs)
-      );
-      const snap1 = await getDocs(q1);
-      snap1.docs.forEach((d) => {
-        if (!allSuratDocs.find((existing) => existing.id === d.id)) {
-          allSuratDocs.push(d);
-        }
-      });
+      for (let i = 0; i < allNomorPIs.length; i += 10) {
+        const batch = allNomorPIs.slice(i, i + 10);
+        const q1 = query(
+          collection(db, "suratPengangkutan"),
+          where("nomorPI", "in", batch)
+        );
+        const snap1 = await getDocs(q1);
+        snap1.docs.forEach((d) => {
+          if (!allSuratDocs.find((existing) => existing.id === d.id)) {
+            allSuratDocs.push(d);
+          }
+        });
+      }
 
       for (let i = 0; i < allNomorPIs.length; i += 10) {
         const batch = allNomorPIs.slice(i, i + 10);
@@ -755,19 +758,54 @@ export default function SuratPengangkutanPage() {
       if (selectedPIs.length > 0) {
         suratData.nomorPI = selectedPIs.map((p) => p.nomorPI);
         suratData.namaCustomer = selectedPIs.map((p) => p.namaCustomer).filter((v, i, a) => a.indexOf(v) === i);
+
+        const piDeductions: Record<string, number> = {};
+
+        for (const item of items) {
+          const zak = parseFloat(item.pengambilanZAK) || 0;
+          const kg = zak * item.bobotPerUnit;
+          const itemPIs = (item.nomorPI || "").split(",").map((s) => s.trim()).filter(Boolean);
+
+          if (kg <= 0) continue;
+
+          if (itemPIs.length === 0) {
+            const perPI = kg / selectedPIs.length;
+            selectedPIs.forEach((pi) => {
+              piDeductions[pi.nomorPI] = (piDeductions[pi.nomorPI] || 0) + perPI;
+            });
+          } else if (itemPIs.length === 1) {
+            piDeductions[itemPIs[0]] = (piDeductions[itemPIs[0]] || 0) + kg;
+          } else {
+            const piOrders = itemPIs.map((piNomor) => {
+              const pi = selectedPIs.find((p) => p.nomorPI === piNomor);
+              const prod = pi?.produkItems.find((p) =>
+                p.namaProduk.toUpperCase().includes(item.jenisPupuk.toUpperCase()) ||
+                item.jenisPupuk.toUpperCase().includes(p.namaProduk.toUpperCase())
+              );
+              return { piNomor, ordered: prod?.kuantitas || 0 };
+            });
+            const totalOrdered = piOrders.reduce((sum, p) => sum + p.ordered, 0);
+            if (totalOrdered > 0) {
+              piOrders.forEach(({ piNomor, ordered }) => {
+                const ratio = ordered / totalOrdered;
+                piDeductions[piNomor] = (piDeductions[piNomor] || 0) + kg * ratio;
+              });
+            } else {
+              const perPI = kg / itemPIs.length;
+              itemPIs.forEach((piNomor) => {
+                piDeductions[piNomor] = (piDeductions[piNomor] || 0) + perPI;
+              });
+            }
+          }
+        }
+
         for (const pi of selectedPIs) {
           const piRef = doc(db, "proformaInvoice", pi.id);
           const piSnap = await getDoc(piRef);
           const piData = piSnap.exists() ? piSnap.data() : null;
-          const currentSisa = piData?.sisaPengambilanKG !== undefined ? piData.sisaPengambilanKG : 0;
-          let piTotalLoaded = 0;
-          items.forEach((item) => {
-            const itemPIs = (item.nomorPI || "").split(",").map((s) => s.trim()).filter(Boolean);
-            if (itemPIs.includes(pi.nomorPI) || itemPIs.length === 0) {
-              const zak = parseFloat(item.pengambilanZAK) || 0;
-              piTotalLoaded += zak * item.bobotPerUnit;
-            }
-          });
+          const totalOrdered = pi.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
+          const currentSisa = piData?.sisaPengambilanKG !== undefined ? piData.sisaPengambilanKG : totalOrdered;
+          const piTotalLoaded = piDeductions[pi.nomorPI] || 0;
           const newSisa = Math.max(0, currentSisa - piTotalLoaded);
           await updateDoc(piRef, {
             sisaPengambilanKG: newSisa,
@@ -775,6 +813,7 @@ export default function SuratPengangkutanPage() {
             updatedAt: serverTimestamp(),
           });
         }
+
         if (isGI) {
           for (const item of items) {
             const stockMatch = getStockForProduct(item.jenisPupuk);
