@@ -688,11 +688,15 @@ export default function SuratPengangkutanPage() {
         suratData.kepadaAlamat = formData.kepadaAlamat.trim();
       }
 
+      const allPIs = items.map((it) => it.nomorPI).filter((v, i, a) => a.indexOf(v) === i);
+      const allCustomers = items.map((it) => it.namaCustomer).filter((v, i, a) => a.indexOf(v) === i);
+      if (allPIs.length > 0) {
+        suratData.nomorPI = allPIs;
+        suratData.namaCustomer = allCustomers;
+      }
       if (isDikuasakan) {
         const firstItem = items.find((it) => it.nomorPI.trim() !== "");
         if (firstItem) {
-          suratData.nomorPI = items.map((it) => it.nomorPI).filter((v, i, a) => a.indexOf(v) === i);
-          suratData.namaCustomer = items.map((it) => it.namaCustomer).filter((v, i, a) => a.indexOf(v) === i);
           suratData.kepadaNama = firstItem.namaCustomer || "";
           suratData.kepadaPerusahaan = firstItem.namaCustomer || "";
         }
@@ -765,10 +769,11 @@ export default function SuratPengangkutanPage() {
         transaksiData.nomorSIM = formData.nomorSIM || null;
       }
 
-      const allPIs = items.map((it) => it.nomorPI).filter((v, i, a) => a.indexOf(v) === i);
-      if (allPIs.length > 0) {
-        transaksiData.nomorPI = allPIs;
-        transaksiData.namaCustomer = items.map((it) => it.namaCustomer).filter((v, i, a) => a.indexOf(v) === i);
+      const transaksiPIs = items.map((it) => it.nomorPI).filter((v, i, a) => a.indexOf(v) === i);
+      const transaksiCustomers = items.map((it) => it.namaCustomer).filter((v, i, a) => a.indexOf(v) === i);
+      if (transaksiPIs.length > 0) {
+        transaksiData.nomorPI = transaksiPIs;
+        transaksiData.namaCustomer = transaksiCustomers;
       }
 
       await addDoc(collection(db, "transaksiBarangKeluar"), transaksiData);

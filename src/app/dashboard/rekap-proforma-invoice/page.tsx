@@ -459,7 +459,16 @@ export default function RekapProformaInvoicePage() {
 
   const getTotalLoaded = (nomorPI: string) => {
     const suratList = getSuratMuatForPI(nomorPI);
-    return suratList.reduce((sum: number, s: SuratMuatInfo) => sum + (s.totalKG || 0), 0);
+    return suratList.reduce((sum: number, s: SuratMuatInfo) => {
+      return sum + (s.items || []).reduce((itemSum: number, it: SuratMuatItem) => {
+        const itemPI = it.nomorPI || "";
+        const match = itemPI === nomorPI;
+        if (match) {
+          return itemSum + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50));
+        }
+        return itemSum;
+      }, 0);
+    }, 0);
   };
 
   const getStatusPengangkutan = (item: ProformaInvoice) => {
@@ -497,6 +506,9 @@ export default function RekapProformaInvoicePage() {
       let loaded = 0;
       suratList.forEach((surat: SuratMuatInfo) => {
         (surat.items || []).forEach((it: SuratMuatItem) => {
+          const itemPI = it.nomorPI || "";
+          const piMatch = itemPI === item.nomorPI;
+          if (!piMatch) return;
           if (it.jenisPupuk && (
             it.jenisPupuk.toUpperCase().includes(prod.namaProduk.toUpperCase()) ||
             prod.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase())
