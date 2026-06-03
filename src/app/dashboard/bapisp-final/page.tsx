@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from "react";
 import {
   collection,
@@ -385,7 +387,7 @@ export default function BapispFinalPage() {
             <p style="font-weight: 700; margin-bottom: 4px; font-size: 10px;">Selanjutnya yang disebut Pihak Kedua.</p>
             <table style="width: 100%; margin-bottom: 8px; font-size: 10px;">
               <tr><td style="padding: 2px 0; vertical-align: top; width: 100px; font-weight: 600;">Nama</td><td>: ${pi.namaCustomer}</td></tr>
-              <tr><td style="padding: 2px 0; vertical-align: top; font-weight: 600;">Alamat</td><td>: ${(pi.alamatCustomer || "").replace(/\\n/g, " ")}</td></tr>
+              <tr><td style="padding: 2px 0; vertical-align: top; font-weight: 600;">Alamat</td><td>: ${(pi.alamatCustomer || "").replace(/\n/g, " ")}</td></tr>
             </table>
           </div>
           <p style="margin-bottom: 12px; font-size: 10px; text-align: justify;">Pihak pertama menyerahkan barang kepada pihak kedua, dan pihak kedua menyatakan telah menerima barang dari pihak pertama, berupa daftar terlampir :</p>
@@ -472,7 +474,7 @@ export default function BapispFinalPage() {
             <div style="display: flex; justify-content: space-between; gap: 0;">
               <div style="flex: 1; border: 1px solid #000; padding: 8px 10px; min-height: 75px;">
                 <p style="font-size: 11px; font-weight: 700; color: #000; margin: 0 0 3px 0;">${pi.namaCustomer || ""}</p>
-                <p style="font-size: 9px; color: #333; line-height: 1.5;">${(pi.alamatCustomer || "").replace(/\\n/g, "<br>")}</p>
+                <p style="font-size: 9px; color: #333; line-height: 1.5;">${(pi.alamatCustomer || "").replace(/\n/g, "<br>")}</p>
               </div>
               <div style="width: 250px; padding: 0 0 0 10px;">
                 <div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 9px; border-bottom: 1px solid #ddd;">
