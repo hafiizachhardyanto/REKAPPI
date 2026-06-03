@@ -35,6 +35,8 @@ interface ProformaInvoice {
     satuan: string;
   }>;
   jumlahTertagih: number;
+  sisaPengambilanKG?: number;
+  statusPengangkutan?: string;
 }
 
 interface StockItem {
@@ -257,6 +259,8 @@ export default function SuratPengangkutanPage() {
         tanggal: doc.data().tanggal || "",
         produkItems: doc.data().produkItems || [],
         jumlahTertagih: doc.data().jumlahTertagih || 0,
+        sisaPengambilanKG: doc.data().sisaPengambilanKG,
+        statusPengangkutan: doc.data().statusPengangkutan || "pending",
       } as ProformaInvoice));
       setPiList(data);
     } catch (error) {
@@ -317,9 +321,10 @@ export default function SuratPengangkutanPage() {
         uniqueIds.add(d.id);
         const data = d.data();
         const suratItems = data.items || [];
-        suratItems.forEach((item: { jenisPupuk: string; pengambilanZAK: number; bobotPerUnit: number; nomorPI?: string }) => {
-          const itemPI = item.nomorPI || "";
-          if (itemPI !== nomorPI) return;
+        suratItems.forEach((item: any) => {
+          const itemPI = item.nomorPI || data.nomorPI || "";
+          const piMatch = Array.isArray(itemPI) ? itemPI.includes(nomorPI) : String(itemPI) === nomorPI;
+          if (!piMatch) return;
           if (
             item.jenisPupuk && (
               item.jenisPupuk.toUpperCase().includes(namaProduk.toUpperCase()) ||
@@ -394,7 +399,10 @@ export default function SuratPengangkutanPage() {
       jenisPupuk = firstProd.namaProduk;
       kuantitasOrdered = firstProd.kuantitas || 0;
       loadedKG = await getLoadedKGForPIProduct(pi.nomorPI, firstProd.namaProduk);
-      const remaining = Math.max(0, kuantitasOrdered - loadedKG);
+      let remaining = Math.max(0, kuantitasOrdered - loadedKG);
+      if (pi.sisaPengambilanKG !== undefined && pi.sisaPengambilanKG >= 0) {
+        remaining = Math.min(remaining, pi.sisaPengambilanKG);
+      }
       maxZAK = Math.floor(remaining / bobot);
       sisa = String(maxZAK);
       pengambilanZAK = maxZAK > 0 ? String(maxZAK) : "";
@@ -428,7 +436,10 @@ export default function SuratPengangkutanPage() {
     const fot = (prod.fot || getStockFotForProduct(prod.namaProduk) || "").trim();
     const loaded = await getLoadedKGForPIProduct(pi.nomorPI, prod.namaProduk);
     const ordered = prod.kuantitas || 0;
-    const remaining = Math.max(0, ordered - loaded);
+    let remaining = Math.max(0, ordered - loaded);
+    if (pi.sisaPengambilanKG !== undefined && pi.sisaPengambilanKG >= 0) {
+      remaining = Math.min(remaining, pi.sisaPengambilanKG);
+    }
     const maxZAK = Math.floor(remaining / bobot);
 
     setItems((prev) =>
@@ -500,7 +511,10 @@ export default function SuratPengangkutanPage() {
     if (firstProd) {
       getLoadedKGForPIProduct(pi.nomorPI, firstProd.namaProduk).then((loaded) => {
         const ordered = firstProd.kuantitas || 0;
-        const remaining = Math.max(0, ordered - loaded);
+        let remaining = Math.max(0, ordered - loaded);
+        if (pi.sisaPengambilanKG !== undefined && pi.sisaPengambilanKG >= 0) {
+          remaining = Math.min(remaining, pi.sisaPengambilanKG);
+        }
         const maxZAK = Math.floor(remaining / bobot);
         setItems((prev) =>
           prev.map((item) => {

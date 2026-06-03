@@ -1705,8 +1705,8 @@ export default function RekapProformaInvoicePage() {
     const pi = selectedItem;
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
     const allSuratForPI = getSuratMuatForPI(pi.nomorPI);
-    const lastSurat = allSuratForPI.length > 0 ? allSuratForPI[allSuratForPI.length - 1] : null;
-    const invoiceDate = lastSurat ? lastSurat.tanggal : pi.tanggal;
+    const sortedSurat = [...allSuratForPI].sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
+    const invoiceDate = invoiceSurat ? invoiceSurat.tanggal : (sortedSurat[0] ? sortedSurat[0].tanggal : pi.tanggal);
 
     const invoiceItems = pi.produkItems
       .map((produk, idx) => {
