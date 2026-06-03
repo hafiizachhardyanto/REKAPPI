@@ -409,20 +409,32 @@ export default function BapispFinalPage() {
           <p style="margin-bottom: 16px; font-size: 10px; text-align: justify;">Demikian berita acara serah terima barang ini diperbuat oleh kedua belah pihak, adapun barang-barang tersebut dalam keadaan baik dan cukup, sejak penandatanganan berita acara ini, maka barang-barang tersebut menjadi tanggung jawab pihak kedua.</p>
           <table style="width: 100%; border-collapse: collapse; margin-top: 30px;">
             <tr>
-              <td style="width: 50%; text-align: center; vertical-align: top; padding: 0 10px;">
+              <td style="width: 50%; text-align: center; padding: 0 10px;">
                 <p style="font-size: 9px; margin-bottom: 4px;">(Pihak Kedua)</p>
-                <div style="height: 60px;"></div>
-                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${pi.namaCustomer}</p>
               </td>
-              <td style="width: 50%; text-align: center; vertical-align: top; padding: 0 10px;">
+              <td style="width: 50%; text-align: center; padding: 0 10px;">
                 <p style="font-size: 9px; margin-bottom: 4px;">(Pihak Pertama)</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="width: 50%; text-align: center; padding: 0 10px; height: 60px; vertical-align: top;">
+                <div style="height: 60px;"></div>
+              </td>
+              <td style="width: 50%; text-align: center; padding: 0 10px; height: 60px; vertical-align: top;">
                 ${ttd ? `
-                  <div style="position: relative; display: inline-block; width: 140px; height: 60px; margin: 4px 0;">
+                  <div style="position: relative; display: inline-block; width: 140px; height: 60px;">
                     <img src="/LogoAGRO.png" alt="Stampel" style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 80px; height: auto; opacity: 0.85; pointer-events: none; z-index: 1;" onerror="this.style.display='none'" />
                     <img src="${ttd.ttdImage}" alt="TTD" style="position: absolute; top: 5px; left: 50%; transform: translateX(-50%); height: 50px; object-fit: contain; z-index: 2; display: block;" onerror="this.style.display='none'" />
                   </div>
                 ` : `<div style="height: 60px;"></div>`}
-                <p style="font-size: 10px; font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${ttd?.nama || "........................"}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="width: 50%; text-align: center; padding: 0 10px;">
+                <p style="font-size: 10px; font-weight: 700; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${pi.namaCustomer}</p>
+              </td>
+              <td style="width: 50%; text-align: center; padding: 0 10px;">
+                <p style="font-size: 10px; font-weight: 700; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${ttd?.nama || "........................"}</p>
                 <p style="font-size: 9px; color: #333; margin-top: 2px;">${ttd?.jabatan || ""}</p>
               </td>
             </tr>
