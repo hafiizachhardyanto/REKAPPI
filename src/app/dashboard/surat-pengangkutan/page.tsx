@@ -160,8 +160,7 @@ export default function SuratPengangkutanPage() {
 
   const fetchExistingSurat = async () => {
     try {
-      const q = query(collection(db, "suratPengangkutan"), orderBy("createdAt", "desc"));
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(collection(db, "suratPengangkutan"));
       const data = snapshot.docs.map((doc) => ({
         id: doc.id,
         nomorSeri: doc.data().nomorSeri || "",
@@ -172,14 +171,21 @@ export default function SuratPengangkutanPage() {
     }
   };
 
-  const getNextNomorSeriGI = () => {
+  const getNextNomorSeriGI = async () => {
     const now = new Date();
     const year = now.getFullYear();
     const roman = getRomanMonth(now.getMonth() + 1);
     const prefix = `BAGB-SP/${year}/${roman}`;
+    const q = query(
+      collection(db, "suratPengangkutan"),
+      where("nomorSeri", ">=", prefix),
+      where("nomorSeri", "<=", prefix + "\uf8ff")
+    );
+    const snapshot = await getDocs(q);
     const numbers: number[] = [];
-    existingSuratList.forEach((s) => {
-      const parsed = parseNomorSeriGI(s.nomorSeri);
+    snapshot.docs.forEach((doc) => {
+      const nomorSeri = doc.data().nomorSeri || "";
+      const parsed = parseNomorSeriGI(nomorSeri);
       if (parsed && parsed.year === year && parsed.roman === roman) {
         numbers.push(parsed.urut);
       }
@@ -196,18 +202,54 @@ export default function SuratPengangkutanPage() {
     return `${prefix}/${String(nextUrut).padStart(4, "0")}`;
   };
 
-  const generateNomorSeriDO = () => {
-  if (subJenisDO === "dikuasakan") {
-    const now = new Date();
-    const year = now.getFullYear();
-    const roman = getRomanMonth(now.getMonth() + 1);
-    const prefix = `BAGB-SP-DO/${year}/${roman}`;
+  const generateNomorSeriDO = async () => {
+    if (subJenisDO === "dikuasakan") {
+      const now = new Date();
+      const year = now.getFullYear();
+      const roman = getRomanMonth(now.getMonth() + 1);
+      const prefix = `BAGB-SP-DO/${year}/${roman}`;
+      const q = query(
+        collection(db, "suratPengangkutan"),
+        where("nomorSeri", ">=", prefix),
+        where("nomorSeri", "<=", prefix + "\uf8ff")
+      );
+      const snapshot = await getDocs(q);
+      const numbers: number[] = [];
+      snapshot.docs.forEach((doc) => {
+        const nomorSeri = doc.data().nomorSeri || "";
+        if (nomorSeri.startsWith(prefix)) {
+          const parts = nomorSeri.split("/");
+          const last = parseInt(parts[parts.length - 1]);
+          if (!isNaN(last)) numbers.push(last);
+        }
+      });
+      numbers.sort((a, b) => a - b);
+      let nextUrut = 1;
+      for (const num of numbers) {
+        if (num === nextUrut) nextUrut++;
+        else if (num > nextUrut) break;
+      }
+      return `${prefix}/${String(nextUrut).padStart(4, "0")}`;
+    }
+    const firstItem = items.find((it) => it.nomorSubDO.trim() !== "");
+    const nomorSubDO = firstItem?.nomorSubDO?.trim() || "";
+    if (!nomorSubDO) return "";
+    const perusahaan = formData.kepadaPerusahaan.trim();
+    if (!perusahaan) return "";
+    const prefix = `BAGB-DO ${nomorSubDO} - ${perusahaan} - SP `;
+    const q = query(
+      collection(db, "suratPengangkutan"),
+      where("nomorSeri", ">=", prefix),
+      where("nomorSeri", "<=", prefix + "\uf8ff")
+    );
+    const snapshot = await getDocs(q);
     const numbers: number[] = [];
-    existingSuratList.forEach((s) => {
-      if (s.nomorSeri.startsWith(prefix)) {
-        const parts = s.nomorSeri.split("/");
-        const last = parseInt(parts[parts.length - 1]);
-        if (!isNaN(last)) numbers.push(last);
+    snapshot.docs.forEach((doc) => {
+      const nomorSeri = doc.data().nomorSeri || "";
+      if (nomorSeri.startsWith(prefix)) {
+        const lastPart = nomorSeri.slice(prefix.length);
+        const num = parseInt(lastPart);
+        if (!isNaN(num)) numbers.push(num);
       }
     });
     numbers.sort((a, b) => a - b);
@@ -216,36 +258,14 @@ export default function SuratPengangkutanPage() {
       if (num === nextUrut) nextUrut++;
       else if (num > nextUrut) break;
     }
-    return `${prefix}/${String(nextUrut).padStart(4, "0")}`;
-  }
-  const firstItem = items.find((it) => it.nomorSubDO.trim() !== "");
-  const nomorSubDO = firstItem?.nomorSubDO?.trim() || "";
-  if (!nomorSubDO) return "";
-  const perusahaan = formData.kepadaPerusahaan.trim();
-  if (!perusahaan) return "";
-  const prefix = `BAGB-DO ${nomorSubDO} - ${perusahaan} - SP `;
-  const numbers: number[] = [];
-  existingSuratList.forEach((s) => {
-    if (s.nomorSeri.startsWith(prefix)) {
-      const lastPart = s.nomorSeri.slice(prefix.length);
-      const num = parseInt(lastPart);
-      if (!isNaN(num)) numbers.push(num);
-    }
-  });
-  numbers.sort((a, b) => a - b);
-  let nextUrut = 1;
-  for (const num of numbers) {
-    if (num === nextUrut) nextUrut++;
-    else if (num > nextUrut) break;
-  }
-  return `${prefix}${String(nextUrut).padStart(4, "0")}`;
-};
+    return `${prefix}${String(nextUrut).padStart(4, "0")}`;
+  };
 
-  const generateNomorSeri = () => {
+  const generateNomorSeri = async () => {
     if (jenisSurat === "gudangInduk") {
-      return getNextNomorSeriGI();
+      return await getNextNomorSeriGI();
     } else if (jenisSurat === "do") {
-      return generateNomorSeriDO();
+      return await generateNomorSeriDO();
     }
     return "";
   };
@@ -666,7 +686,7 @@ export default function SuratPengangkutanPage() {
       const isMandiri = subJenisDO === "mandiri";
       const isDikuasakan = subJenisDO === "dikuasakan";
 
-      const nomorSeri = generateNomorSeri();
+      const nomorSeri = await generateNomorSeri();
       if (!nomorSeri) {
         setErrors({ submit: "Gagal generate nomor seri. Silakan cek kembali data." });
         setIsSubmitting(false);
@@ -837,14 +857,15 @@ export default function SuratPengangkutanPage() {
     }
   };
 
-  const handlePrintPDF = () => {
-    const nomorSeri = generateNomorSeri();
-    if (!nomorSeri) {
-      setErrors({ submit: "Gagal generate nomor seri untuk preview." });
-      return;
-    }
+  const handlePrintPDF = async () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
+    const nomorSeri = await generateNomorSeri();
+    if (!nomorSeri) {
+      setErrors({ submit: "Gagal generate nomor seri untuk preview." });
+      printWindow.close();
+      return;
+    }
     const isGI = jenisSurat === "gudangInduk";
     const isDikuasakan = subJenisDO === "dikuasakan";
     const itemsHtml = items
@@ -885,7 +906,7 @@ export default function SuratPengangkutanPage() {
         <p class="recipient-title">Kepada Yth :</p>
         <p class="recipient-name">${formData.kepadaNama || ""}</p>
         <p class="recipient-name">${formData.kepadaPerusahaan || ""}</p>
-        <p class="recipient-address">${(formData.kepadaAlamat || "").replace(/\n/g, "<br>")}</p>
+        <p class="recipient-address">${(formData.kepadaAlamat || "").split("\n").join("<br>")}</p>
       </div>`;
     }
 
