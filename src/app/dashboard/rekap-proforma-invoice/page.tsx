@@ -61,6 +61,7 @@ interface SuratMuatInfo {
   kepadaPerusahaan?: string;
   kepadaAlamat?: string;
   namaCustomer?: string | string[];
+  nomorInvoice?: string;
 }
 
 interface ProformaInvoice {
@@ -486,6 +487,7 @@ export default function RekapProformaInvoicePage() {
           kepadaPerusahaan: d.kepadaPerusahaan || firstCustomer || "",
           kepadaAlamat: d.kepadaAlamat || "",
           namaCustomer: rawCustomer || "",
+          nomorInvoice: d.nomorInvoice || "",
         };
         piList.forEach((pi) => {
           if (!map[pi]) map[pi] = [];
@@ -1318,41 +1320,84 @@ export default function RekapProformaInvoicePage() {
     filteredData.forEach((item) => {
       const suratList = getSuratMuatForPI(item.nomorPI);
       const produkStatus = getProdukLoadStatus(item);
-      const bastCheck = async () => {
-        const q1 = query(collection(db, "beritaAcara"), where("nomorPI", "==", item.nomorPI));
-        const snap1 = await getDocs(q1);
-        const q2 = query(collection(db, "beritaAcara"), where("nomorPI", "array-contains", item.nomorPI));
-        const snap2 = await getDocs(q2);
-        return !snap1.empty || !snap2.empty;
-      };
-      item.produkItems.forEach((produk, pidx) => {
-        const status = produkStatus.find((p) => p.namaProduk === produk.namaProduk);
-        const loaded = status?.loaded || 0;
-        const sisa = status?.remaining || (produk.kuantitas || 0);
-        const matchingSurat = suratList.filter((s) =>
-          (s.items || []).some((it) =>
-            it.jenisPupuk && (
-              it.jenisPupuk.toUpperCase().includes(produk.namaProduk.toUpperCase()) ||
-              produk.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase())
-            )
-          )
-        );
-        const noSP = matchingSurat.map((s) => s.nomorSeri).join(", ");
-        const invoiceNum = item.invoiceBaseNumber ? `BAGB-INV-${item.invoiceBaseNumber}` : "";
+      const statusMuat = getStatusPengangkutan(item);
+      const needSplit = item.produkItems.length > 2 || suratList.length > 2;
+      const invoiceFull = item.invoiceBaseNumber ? `BAGB-INV-${item.invoiceBaseNumber}` : "";
+      const baStatus = statusMuat === "complete" ? "Sudah" : "Belum";
+      const paymentStatus = item.statusPelunasan || getPaymentStatus(item);
+      if (!needSplit) {
+        const allProduk = item.produkItems.map((p) => p.namaProduk).join("\n");
+        const allFOT = item.produkItems.map((p) => p.fot || "-").join("\n");
+        const allKuantitas = item.produkItems.map((p) => `${(p.kuantitas || 0).toLocaleString("id-ID")} KG`).join("\n");
+        const allLoaded = produkStatus.map((p) => `${p.loaded.toLocaleString("id-ID")} KG`).join("\n");
+        const allSisa = produkStatus.map((p) => `${p.remaining.toLocaleString("id-ID")} KG`).join("\n");
+        const allSP = suratList.map((s) => s.nomorSeri).join("\n");
+        const allInvoiceS = suratList.filter((s) => s.nomorInvoice).map((s) => s.nomorInvoice).join("\n");
+        const totalKuantitas = item.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
+        const totalLoaded = produkStatus.reduce((sum, p) => sum + p.loaded, 0);
+        const totalSisa = produkStatus.reduce((sum, p) => sum + p.remaining, 0);
         exportData.push({
           "Tanggal": item.tanggal,
           "No PI": item.nomorPI,
           "Nama Customer": item.namaCustomer,
-          "Nama Produk": produk.namaProduk,
-          "FOT": produk.fot || "",
-          "Kuantitas (Kg)": produk.kuantitas || 0,
-          "Di Ambil": loaded,
-          "Sisa": sisa,
-          "Invoice": invoiceNum,
-          "No SP": noSP,
-          "BA": item.statusPengangkutan === "complete" ? "Sudah" : "Belum",
+          "Nama Produk": allProduk,
+          "FOT": allFOT,
+          "Kuantitas (Kg)": allKuantitas,
+          "Total Kuantitas": `${totalKuantitas.toLocaleString("id-ID")} KG`,
+          "Di Ambil": allLoaded,
+          "Total Diambil": `${totalLoaded.toLocaleString("id-ID")} KG`,
+          "Sisa": allSisa,
+          "Total Sisa": `${totalSisa.toLocaleString("id-ID")} KG`,
+          "Invoice Full": invoiceFull,
+          "Invoice Sementara": allInvoiceS,
+          "No SP": allSP,
+          "BA": baStatus,
+          "Status Pelunasan": paymentStatus,
+          "Jumlah Tertagih": item.jumlahTertagih,
+          "Jumlah Produk": item.produkItems.length,
+          "Jumlah SP": suratList.length,
         });
-      });
+      } else {
+        item.produkItems.forEach((produk) => {
+          const status = produkStatus.find((p) => p.namaProduk === produk.namaProduk);
+          const loaded = status?.loaded || 0;
+          const sisa = status?.remaining || (produk.kuantitas || 0);
+          const matchingSurat = suratList.filter((s) =>
+            (s.items || []).some((it) =>
+              it.jenisPupuk && (
+                it.jenisPupuk.toUpperCase().includes(produk.namaProduk.toUpperCase()) ||
+                produk.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase())
+              )
+            )
+          );
+          const spNumbers = matchingSurat.map((s) => s.nomorSeri).join("\n");
+          const invoiceSList = matchingSurat.filter((s) => s.nomorInvoice).map((s) => s.nomorInvoice).join("\n");
+          const totalKuantitas = item.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
+          const totalLoaded = produkStatus.reduce((sum, p) => sum + p.loaded, 0);
+          const totalSisa = produkStatus.reduce((sum, p) => sum + p.remaining, 0);
+          exportData.push({
+            "Tanggal": item.tanggal,
+            "No PI": item.nomorPI,
+            "Nama Customer": item.namaCustomer,
+            "Nama Produk": produk.namaProduk,
+            "FOT": produk.fot || "",
+            "Kuantitas (Kg)": (produk.kuantitas || 0).toLocaleString("id-ID"),
+            "Total Kuantitas": `${totalKuantitas.toLocaleString("id-ID")} KG`,
+            "Di Ambil": loaded.toLocaleString("id-ID"),
+            "Total Diambil": `${totalLoaded.toLocaleString("id-ID")} KG`,
+            "Sisa": sisa.toLocaleString("id-ID"),
+            "Total Sisa": `${totalSisa.toLocaleString("id-ID")} KG`,
+            "Invoice Full": invoiceFull,
+            "Invoice Sementara": invoiceSList,
+            "No SP": spNumbers,
+            "BA": baStatus,
+            "Status Pelunasan": paymentStatus,
+            "Jumlah Tertagih": item.jumlahTertagih,
+            "Jumlah Produk": item.produkItems.length,
+            "Jumlah SP": suratList.length,
+          });
+        });
+      }
     });
     exportToExcel(exportData, `Rekap_Proforma_Invoice_${new Date().toISOString().split("T")[0]}`, "Rekap PI");
   };
