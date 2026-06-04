@@ -253,6 +253,7 @@ export default function RekapProformaInvoicePage() {
   const [invoiceSurat, setInvoiceSurat] = useState<SuratMuatInfo | null>(null);
   const [selectedOrderTTD, setSelectedOrderTTD] = useState("");
   const [invoiceNomor, setInvoiceNomor] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
@@ -655,6 +656,7 @@ export default function RekapProformaInvoicePage() {
     setInvoiceSurat(null);
     setSelectedOrderTTD("");
     setInvoiceNomor("");
+    setInvoiceDate("");
     setIsInvoiceModalOpen(true);
     setIsGeneratingInvoice(true);
     try {
@@ -667,6 +669,10 @@ export default function RekapProformaInvoicePage() {
       }
       const nomor = `BAGB-INV-${baseNumber}`;
       setInvoiceNomor(nomor);
+      const allSurat = getSuratMuatForPI(row.nomorPI);
+      const sortedSurat = [...allSurat].sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
+      const tanggal = sortedSurat[0] ? sortedSurat[0].tanggal : row.tanggal;
+      setInvoiceDate(tanggal);
     } catch (error) { console.error(error); } finally { setIsGeneratingInvoice(false); }
   };
 
@@ -674,6 +680,7 @@ export default function RekapProformaInvoicePage() {
     setInvoiceSurat(surat);
     setSelectedOrderTTD("");
     setInvoiceNomor("");
+    setInvoiceDate(surat.tanggal);
     setIsInvoiceModalOpen(true);
     setIsGeneratingInvoice(true);
     try {
@@ -1725,14 +1732,13 @@ export default function RekapProformaInvoicePage() {
     const pi = selectedItem;
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
     const allSuratForPI = getSuratMuatForPI(pi.nomorPI);
-    const sortedSurat = [...allSuratForPI].sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
-    const invoiceDate = invoiceSurat ? invoiceSurat.tanggal : (sortedSurat[0] ? sortedSurat[0].tanggal : pi.tanggal);
+    const tanggalInvoice = invoiceDate || pi.tanggal;
 
     const invoiceItems = pi.produkItems
       .map((produk, idx) => {
         let loadedQty = 0;
         if (invoiceSurat) {
-          (invoiceSurat.items || []).forEach((it) => {
+          (invoiceSurat.items || []).forEach((it: SuratMuatItem) => {
             const itemPI = it.nomorPI || "";
             if (itemPI && itemPI !== pi.nomorPI) return;
             const match =
@@ -1744,8 +1750,8 @@ export default function RekapProformaInvoicePage() {
             }
           });
         } else {
-          allSuratForPI.forEach((surat) => {
-            (surat.items || []).forEach((it) => {
+          allSuratForPI.forEach((surat: SuratMuatInfo) => {
+            (surat.items || []).forEach((it: SuratMuatItem) => {
               const itemPI = it.nomorPI || "";
               if (itemPI && itemPI !== pi.nomorPI) return;
               const match =
@@ -1881,7 +1887,7 @@ export default function RekapProformaInvoicePage() {
             </div>
             <div class="meta-box">
               <p><span style="font-weight: 600;">INVOICE NO. :</span> ${invoiceNomor}</p>
-              <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(invoiceDate).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
+              <p><span style="font-weight: 600;">TANGGAL :</span> ${new Date(tanggalInvoice).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
               <p><span style="font-weight: 600;">CUSTOMER ID :</span> ${pi.nomorPI || ""}</p>
             </div>
           </div>
@@ -2656,6 +2662,11 @@ export default function RekapProformaInvoicePage() {
             <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Nomor Invoice</p>
             <p className="text-lg font-mono font-bold text-green-700">{invoiceNomor || "Memuat..."}</p>
             {isGeneratingInvoice && <p className="text-sm text-gray-500 mt-1">Menghasilkan nomor invoice...</p>}
+          </div>
+          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Tanggal Invoice</p>
+            <p className="text-sm font-semibold text-gray-800">{invoiceDate ? new Date(invoiceDate).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-"}</p>
+            <p className="text-xs text-gray-500 mt-1">{invoiceSurat ? "Menyesuaikan tanggal Surat Pengangkutan" : invoiceDate !== selectedItem?.tanggal ? "Menyesuaikan tanggal Surat Pengangkutan terakhir" : "Menyesuaikan tanggal Proforma Invoice"}</p>
           </div>
           <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
             <p className="text-sm text-blue-700"><span className="font-semibold">Dipesan Oleh:</span> {selectedItem?.namaCustomer || "-"}</p>

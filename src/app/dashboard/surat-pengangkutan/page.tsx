@@ -74,6 +74,12 @@ interface ExistingSurat {
   nomorSeri: string;
 }
 
+interface FOTData {
+  id: string;
+  namaFOT: string;
+  alamatFOT: string;
+}
+
 const getRomanMonth = (month: number) => {
   const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
   return romans[month - 1] || "I";
@@ -103,6 +109,7 @@ export default function SuratPengangkutanPage() {
   const [piList, setPiList] = useState<ProformaInvoice[]>([]);
   const [stockList, setStockList] = useState<StockItem[]>([]);
   const [existingSuratList, setExistingSuratList] = useState<ExistingSurat[]>([]);
+  const [fotList, setFotList] = useState<FOTData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -131,6 +138,7 @@ export default function SuratPengangkutanPage() {
     fetchProformaInvoice();
     fetchStockGudang();
     fetchExistingSurat();
+    fetchFOT();
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -166,6 +174,21 @@ export default function SuratPengangkutanPage() {
         nomorSeri: doc.data().nomorSeri || "",
       } as ExistingSurat));
       setExistingSuratList(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const fetchFOT = async () => {
+    try {
+      const q = query(collection(db, "fot"), orderBy("namaFOT", "asc"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        namaFOT: doc.data().namaFOT || "",
+        alamatFOT: doc.data().alamatFOT || "",
+      } as FOTData));
+      setFotList(data);
     } catch (error) {
       console.error(error);
     }
@@ -236,7 +259,7 @@ export default function SuratPengangkutanPage() {
     if (!nomorSubDO) return "";
     const perusahaan = formData.kepadaPerusahaan.trim();
     if (!perusahaan) return "";
-    const prefix = `BAGB-DO ${nomorSubDO} - ${perusahaan} - SP `;
+    const prefix = `BAGB-DO-${nomorSubDO}-${perusahaan}-SP-`;
     const q = query(
       collection(db, "suratPengangkutan"),
       where("nomorSeri", ">=", prefix),
@@ -579,6 +602,19 @@ export default function SuratPengangkutanPage() {
         delete newErrors[name];
         return newErrors;
       });
+    }
+  };
+
+  const handlePerusahaanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    const selected = fotList.find((f) => f.namaFOT === value);
+    setFormData((prev) => ({
+      ...prev,
+      kepadaPerusahaan: value,
+      kepadaAlamat: selected ? selected.alamatFOT : "",
+    }));
+    if (errors.kepadaPerusahaan) {
+      setErrors((prev) => { const n = { ...prev }; delete n.kepadaPerusahaan; return n; });
     }
   };
 
@@ -1220,8 +1256,18 @@ export default function SuratPengangkutanPage() {
           <Card title="Informasi Penerima">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Input label="Kepada Yth (Nama)" type="text" name="kepadaNama" value={formData.kepadaNama} onChange={handleChange} placeholder="Contoh: Bapak Kepala Gudang" error={errors.kepadaNama} required />
-              <Input label="Nama Perusahaan" type="text" name="kepadaPerusahaan" value={formData.kepadaPerusahaan} onChange={handleChange} placeholder="Contoh: PT Bukit Agrochemical Baru" error={errors.kepadaPerusahaan} required />
-              <Input label="Alamat" type="text" name="kepadaAlamat" value={formData.kepadaAlamat} onChange={handleChange} placeholder="Contoh: Desa Sungai Rangit, Pangkalan Lada" error={errors.kepadaAlamat} required className="md:col-span-2" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama Perusahaan <span className="text-red-500">*</span></label>
+                <select name="kepadaPerusahaan" value={formData.kepadaPerusahaan} onChange={handlePerusahaanChange} className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white ${errors.kepadaPerusahaan ? "border-red-500" : "border-gray-300"}`}>
+                  <option value="">Pilih perusahaan...</option>
+                  {fotList.map((fot) => (<option key={fot.id} value={fot.namaFOT}>{fot.namaFOT}</option>))}
+                </select>
+                {errors.kepadaPerusahaan && <p className="mt-1 text-sm text-red-600">{errors.kepadaPerusahaan}</p>}
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Alamat</label>
+                <input type="text" name="kepadaAlamat" value={formData.kepadaAlamat} readOnly className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 text-sm" />
+              </div>
             </div>
           </Card>
         )}

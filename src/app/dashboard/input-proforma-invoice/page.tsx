@@ -41,6 +41,12 @@ interface CustomerData {
   createdAt: any;
 }
 
+interface FOTData {
+  id: string;
+  namaFOT: string;
+  alamatFOT: string;
+}
+
 interface FormDataState {
   tanggal: string;
   nomorPI: string;
@@ -66,6 +72,7 @@ export default function InputProformaInvoicePage() {
   const [ttdList, setTtdList] = useState<TTDData[]>([]);
   const [existingPIList, setExistingPIList] = useState<string[]>([]);
   const [customerList, setCustomerList] = useState<CustomerData[]>([]);
+  const [fotList, setFotList] = useState<FOTData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -112,6 +119,7 @@ export default function InputProformaInvoicePage() {
     fetchTTD();
     fetchExistingPI();
     fetchCustomers();
+    fetchFOT();
     generateTanggalJatuhTempo();
   }, []);
 
@@ -168,6 +176,19 @@ export default function InputProformaInvoicePage() {
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as CustomerData));
       setCustomerList(data);
+    } catch (error) { console.error(error); }
+  };
+
+  const fetchFOT = async () => {
+    try {
+      const q = query(collection(db, "fot"), orderBy("namaFOT", "asc"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        namaFOT: doc.data().namaFOT || "",
+        alamatFOT: doc.data().alamatFOT || "",
+      } as FOTData));
+      setFotList(data);
     } catch (error) { console.error(error); }
   };
 
@@ -682,7 +703,10 @@ export default function InputProformaInvoicePage() {
                         {errors[`produk_${index}`] && <p className="mt-1 text-xs text-red-600">{errors[`produk_${index}`]}</p>}
                       </td>
                       <td className="px-4 py-3">
-                        <input type="text" value={item.fot} onChange={(e) => handleProdukChange(item.id, "fot", e.target.value)} placeholder="FOT" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                        <select value={item.fot} onChange={(e) => handleProdukChange(item.id, "fot", e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                          <option value="">Pilih FOT...</option>
+                          {fotList.map((fot) => (<option key={fot.id} value={fot.namaFOT}>{fot.namaFOT}</option>))}
+                        </select>
                       </td>
                       <td className="px-4 py-3">
                         <input type="text" value={item.produsen} readOnly placeholder="Produsen" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-600" />
