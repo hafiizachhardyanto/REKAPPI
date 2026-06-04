@@ -61,7 +61,6 @@ interface SuratMuatInfo {
   kepadaPerusahaan?: string;
   kepadaAlamat?: string;
   namaCustomer?: string | string[];
-  nomorInvoice?: string;
 }
 
 interface ProformaInvoice {
@@ -280,6 +279,8 @@ export default function RekapProformaInvoicePage() {
     nomorPolisi: "",
     driverUnit: "",
     nomorSIM: "",
+    jenisSurat: "gudangInduk",
+    subJenisDO: "",
     kepadaNama: "",
     kepadaPerusahaan: "",
     kepadaAlamat: "",
@@ -487,7 +488,6 @@ export default function RekapProformaInvoicePage() {
           kepadaPerusahaan: d.kepadaPerusahaan || firstCustomer || "",
           kepadaAlamat: d.kepadaAlamat || "",
           namaCustomer: rawCustomer || "",
-          nomorInvoice: d.nomorInvoice || "",
         };
         piList.forEach((pi) => {
           if (!map[pi]) map[pi] = [];
@@ -762,6 +762,8 @@ export default function RekapProformaInvoicePage() {
       nomorPolisi: surat.nomorPolisi,
       driverUnit: surat.driverUnit,
       nomorSIM: surat.nomorSIM || "",
+      jenisSurat: surat.jenisSurat || "gudangInduk",
+      subJenisDO: surat.subJenisDO || "",
       kepadaNama: surat.kepadaNama || "",
       kepadaPerusahaan: surat.kepadaPerusahaan || "",
       kepadaAlamat: surat.kepadaAlamat || "",
@@ -849,8 +851,7 @@ export default function RekapProformaInvoicePage() {
         fot: it.fot || "",
       }));
       const totalPengambilanKG = newItems.reduce((sum, it) => sum + it.totalKG, 0);
-      const isGI = !selectedSurat.jenisSurat || selectedSurat.jenisSurat === "gudangInduk";
-      const updateData: Record<string, any> = {
+      const updateData: any = {
         tanggal: editSuratForm.tanggal,
         nomorSeri: newNomorSeri,
         nomorPolisi: editSuratForm.nomorPolisi.trim(),
@@ -860,7 +861,9 @@ export default function RekapProformaInvoicePage() {
         totalPengambilanKG: totalPengambilanKG,
         updatedAt: serverTimestamp(),
       };
-      if (!isGI) {
+      if (editSuratForm.jenisSurat !== "gudangInduk") {
+        updateData.jenisSurat = editSuratForm.jenisSurat;
+        updateData.subJenisDO = editSuratForm.subJenisDO || null;
         updateData.kepadaNama = editSuratForm.kepadaNama.trim();
         updateData.kepadaPerusahaan = editSuratForm.kepadaPerusahaan.trim();
         updateData.kepadaAlamat = editSuratForm.kepadaAlamat.trim();
@@ -897,6 +900,7 @@ export default function RekapProformaInvoicePage() {
           });
         }
       }
+      const isGI = !selectedSurat.jenisSurat || selectedSurat.jenisSurat === "gudangInduk";
       if (isGI) {
         const productMapOld: Record<string, number> = {};
         const productMapNew: Record<string, number> = {};
@@ -1318,86 +1322,53 @@ export default function RekapProformaInvoicePage() {
   const handleExportExcel = () => {
     const exportData: any[] = [];
     filteredData.forEach((item) => {
+      const produkRows = item.produkItems.map((p, idx) => ({
+        "No": idx + 1,
+        "Nama Produk": p.namaProduk,
+        "FOT": p.fot || "",
+        "Produsen": p.produsen || "",
+        "Kuantitas": p.kuantitas || 0,
+        "Satuan": p.satuan || "",
+        "Harga Satuan": p.hargaSatuan || 0,
+        "Harga Per ZAK/DUS": p.hargaPerZakDus || 0,
+        "Total Harga": p.totalHarga || 0,
+        "PPN 11%": p.includePPN ? (p.ppnNominal || ((p.kuantitas || 0) * (p.hargaSatuan || 0) * 0.11)) : 0,
+      }));
       const suratList = getSuratMuatForPI(item.nomorPI);
-      const produkStatus = getProdukLoadStatus(item);
-      const statusMuat = getStatusPengangkutan(item);
-      const needSplit = item.produkItems.length > 2 || suratList.length > 2;
-      const invoiceFull = item.invoiceBaseNumber ? `BAGB-INV-${item.invoiceBaseNumber}` : "";
-      const baStatus = statusMuat === "complete" ? "Sudah" : "Belum";
-      const paymentStatus = item.statusPelunasan || getPaymentStatus(item);
-      if (!needSplit) {
-        const allProduk = item.produkItems.map((p) => p.namaProduk).join("\n");
-        const allFOT = item.produkItems.map((p) => p.fot || "-").join("\n");
-        const allKuantitas = item.produkItems.map((p) => `${(p.kuantitas || 0).toLocaleString("id-ID")} KG`).join("\n");
-        const allLoaded = produkStatus.map((p) => `${p.loaded.toLocaleString("id-ID")} KG`).join("\n");
-        const allSisa = produkStatus.map((p) => `${p.remaining.toLocaleString("id-ID")} KG`).join("\n");
-        const allSP = suratList.map((s) => s.nomorSeri).join("\n");
-        const allInvoiceS = suratList.filter((s) => s.nomorInvoice).map((s) => s.nomorInvoice).join("\n");
-        const totalKuantitas = item.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
-        const totalLoaded = produkStatus.reduce((sum, p) => sum + p.loaded, 0);
-        const totalSisa = produkStatus.reduce((sum, p) => sum + p.remaining, 0);
-        exportData.push({
-          "Tanggal": item.tanggal,
-          "No PI": item.nomorPI,
-          "Nama Customer": item.namaCustomer,
-          "Nama Produk": allProduk,
-          "FOT": allFOT,
-          "Kuantitas (Kg)": allKuantitas,
-          "Total Kuantitas": `${totalKuantitas.toLocaleString("id-ID")} KG`,
-          "Di Ambil": allLoaded,
-          "Total Diambil": `${totalLoaded.toLocaleString("id-ID")} KG`,
-          "Sisa": allSisa,
-          "Total Sisa": `${totalSisa.toLocaleString("id-ID")} KG`,
-          "Invoice Full": invoiceFull,
-          "Invoice Sementara": allInvoiceS,
-          "No SP": allSP,
-          "BA": baStatus,
-          "Status Pelunasan": paymentStatus,
-          "Jumlah Tertagih": item.jumlahTertagih,
-          "Jumlah Produk": item.produkItems.length,
-          "Jumlah SP": suratList.length,
-        });
-      } else {
-        item.produkItems.forEach((produk) => {
-          const status = produkStatus.find((p) => p.namaProduk === produk.namaProduk);
-          const loaded = status?.loaded || 0;
-          const sisa = status?.remaining || (produk.kuantitas || 0);
-          const matchingSurat = suratList.filter((s) =>
-            (s.items || []).some((it) =>
-              it.jenisPupuk && (
-                it.jenisPupuk.toUpperCase().includes(produk.namaProduk.toUpperCase()) ||
-                produk.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase())
-              )
-            )
-          );
-          const spNumbers = matchingSurat.map((s) => s.nomorSeri).join("\n");
-          const invoiceSList = matchingSurat.filter((s) => s.nomorInvoice).map((s) => s.nomorInvoice).join("\n");
-          const totalKuantitas = item.produkItems.reduce((sum, p) => sum + (p.kuantitas || 0), 0);
-          const totalLoaded = produkStatus.reduce((sum, p) => sum + p.loaded, 0);
-          const totalSisa = produkStatus.reduce((sum, p) => sum + p.remaining, 0);
-          exportData.push({
-            "Tanggal": item.tanggal,
-            "No PI": item.nomorPI,
-            "Nama Customer": item.namaCustomer,
-            "Nama Produk": produk.namaProduk,
-            "FOT": produk.fot || "",
-            "Kuantitas (Kg)": (produk.kuantitas || 0).toLocaleString("id-ID"),
-            "Total Kuantitas": `${totalKuantitas.toLocaleString("id-ID")} KG`,
-            "Di Ambil": loaded.toLocaleString("id-ID"),
-            "Total Diambil": `${totalLoaded.toLocaleString("id-ID")} KG`,
-            "Sisa": sisa.toLocaleString("id-ID"),
-            "Total Sisa": `${totalSisa.toLocaleString("id-ID")} KG`,
-            "Invoice Full": invoiceFull,
-            "Invoice Sementara": invoiceSList,
-            "No SP": spNumbers,
-            "BA": baStatus,
-            "Status Pelunasan": paymentStatus,
-            "Jumlah Tertagih": item.jumlahTertagih,
-            "Jumlah Produk": item.produkItems.length,
-            "Jumlah SP": suratList.length,
-          });
-        });
-      }
+      const suratRows = suratList.map((s, idx) => ({
+        "No Surat": idx + 1,
+        "Nomor Seri": s.nomorSeri,
+        "Tanggal Surat": s.tanggal,
+        "Driver": s.driverUnit,
+        "No Polisi": s.nomorPolisi,
+        "Total KG": s.totalKG,
+      }));
+      exportData.push({
+        "Tanggal PI": item.tanggal,
+        "Nomor PI": item.nomorPI,
+        "Nama Customer": item.namaCustomer,
+        "Alamat": item.alamatCustomer,
+        "NPWP": item.npwp || "",
+        "Metode Pembayaran": item.metodePembayaran,
+        "Subtotal": item.subtotal,
+        "Total PPN": item.ppnNominal,
+        "Uang Muka": item.uangMuka || 0,
+        "Ongkos Kirim": item.ongkosKirim || 0,
+        "Jumlah Tertagih": item.jumlahTertagih,
+        "Terbilang": item.terbilang,
+        "Jatuh Tempo": item.tanggalJatuhTempo,
+        "Keterangan": item.keterangan,
+        "Status Pengangkutan": getStatusPengangkutan(item),
+        "Status Pelunasan": item.statusPelunasan || getPaymentStatus(item),
+        "Jumlah Dibayar": item.jumlahUangDibayar || 0,
+        "Tanggal Pembayaran": item.tanggalPembayaran || "",
+        "Sisa (KG)": item.sisaPengambilanKG || 0,
+        "Dibuat Oleh": item.createdBy,
+        "Produk Count": item.produkItems.length,
+        "Produk Detail": JSON.stringify(produkRows),
+        "Surat Muat Count": suratList.length,
+        "Surat Muat Detail": JSON.stringify(suratRows),
+      });
     });
     exportToExcel(exportData, `Rekap_Proforma_Invoice_${new Date().toISOString().split("T")[0]}`, "Rekap PI");
   };
@@ -2553,16 +2524,6 @@ export default function RekapProformaInvoicePage() {
         <form onSubmit={handleUpdateSurat} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Input label="Tanggal" type="date" value={editSuratForm.tanggal} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, tanggal: e.target.value }))} required />
-            {selectedSurat && selectedSurat.jenisSurat !== "gudangInduk" && (
-              <div className="md:col-span-2 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Informasi Penerima</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label="Kepada Yth (Nama)" type="text" value={editSuratForm.kepadaNama} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, kepadaNama: e.target.value }))} required />
-                  <Input label="Nama Perusahaan" type="text" value={editSuratForm.kepadaPerusahaan} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, kepadaPerusahaan: e.target.value }))} required />
-                  <Input label="Alamat" type="text" value={editSuratForm.kepadaAlamat} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, kepadaAlamat: e.target.value }))} required className="md:col-span-2" />
-                </div>
-              </div>
-            )}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Nomor Seri</label>
               <div className="flex gap-2">
@@ -2579,6 +2540,51 @@ export default function RekapProformaInvoicePage() {
             <Input label="Nomor Polisi" type="text" value={editSuratForm.nomorPolisi} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorPolisi: e.target.value }))} required />
             <Input label="Driver Unit" type="text" value={editSuratForm.driverUnit} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, driverUnit: e.target.value }))} required />
             <Input label="Nomor SIM" type="text" value={editSuratForm.nomorSIM} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, nomorSIM: e.target.value }))} className="md:col-span-2" />
+            {editSuratForm.jenisSurat !== "gudangInduk" && (
+              <>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Jenis Surat</label>
+                  <select
+                    value={editSuratForm.jenisSurat}
+                    onChange={(e) => setEditSuratForm((prev) => ({ ...prev, jenisSurat: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white text-sm"
+                  >
+                    <option value="do">DO (Delivery Order)</option>
+                    <option value="gudangInduk">Gudang Induk</option>
+                  </select>
+                </div>
+                {editSuratForm.jenisSurat === "do" && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Sub Jenis DO</label>
+                    <select
+                      value={editSuratForm.subJenisDO}
+                      onChange={(e) => setEditSuratForm((prev) => ({ ...prev, subJenisDO: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white text-sm"
+                    >
+                      <option value="">Pilih Sub Jenis</option>
+                      <option value="mandiri">DO Mandiri</option>
+                      <option value="dikuasakan">DO Dikuasakan</option>
+                    </select>
+                  </div>
+                )}
+                <div className="md:col-span-2">
+                  <Input label="Nama Penerima" type="text" value={editSuratForm.kepadaNama} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, kepadaNama: e.target.value }))} required />
+                </div>
+                <div className="md:col-span-2">
+                  <Input label="Perusahaan Penerima" type="text" value={editSuratForm.kepadaPerusahaan} onChange={(e) => setEditSuratForm((prev) => ({ ...prev, kepadaPerusahaan: e.target.value }))} required />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Alamat Penerima</label>
+                  <textarea
+                    value={editSuratForm.kepadaAlamat}
+                    onChange={(e) => setEditSuratForm((prev) => ({ ...prev, kepadaAlamat: e.target.value }))}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white resize-none text-sm"
+                    required
+                  />
+                </div>
+              </>
+            )}
           </div>
           <div className="space-y-4">
             <h4 className="text-sm font-semibold text-gray-700">Item Pengangkutan</h4>
