@@ -254,34 +254,33 @@ export default function SuratPengangkutanPage() {
       }
       return `${prefix}/${String(nextUrut).padStart(4, "0")}`;
     }
-    const firstItem = items.find((it) => it.nomorSubDO.trim() !== "");
-    const nomorSubDO = firstItem?.nomorSubDO?.trim() || "";
-    if (!nomorSubDO) return "";
+
     const perusahaan = formData.kepadaPerusahaan.trim();
     if (!perusahaan) return "";
-    const prefix = `BAGB-DO-${nomorSubDO}-${perusahaan}-SP-`;
-    const q = query(
-      collection(db, "suratPengangkutan"),
-      where("jenisSurat", "==", "do"),
-      where("subJenisDO", "==", "mandiri")
-    );
-    const snapshot = await getDocs(q);
+
+    const firstItem = items.find((it) => it.nomorSubDO.trim() !== "");
+    const nomorSubDO = firstItem?.nomorSubDO?.trim() || "";
+
+    const snapshot = await getDocs(collection(db, "suratPengangkutan"));
     const numbers: number[] = [];
     snapshot.docs.forEach((doc) => {
-      const nomorSeri = doc.data().nomorSeri || "";
-      if (nomorSeri.startsWith(prefix)) {
-        const lastPart = nomorSeri.slice(prefix.length);
-        const num = parseInt(lastPart);
-        if (!isNaN(num)) numbers.push(num);
-      }
+      const data = doc.data();
+      if (data.jenisSurat !== "do" || data.subJenisDO !== "mandiri") return;
+      const nomorSeri = data.nomorSeri || "";
+      if (!nomorSeri.includes("-SP-")) return;
+      const [prefixPart, numPart] = nomorSeri.split("-SP-");
+      if (!prefixPart || !prefixPart.endsWith(`-${perusahaan}`)) return;
+      const num = parseInt(numPart);
+      if (!isNaN(num)) numbers.push(num);
     });
+
     numbers.sort((a, b) => a - b);
     let nextUrut = 1;
     for (const num of numbers) {
       if (num === nextUrut) nextUrut++;
       else if (num > nextUrut) break;
     }
-    return `${prefix}${String(nextUrut).padStart(4, "0")}`;
+    return `BAGB-DO-${nomorSubDO}-${perusahaan}-SP-${String(nextUrut).padStart(4, "0")}`;
   };
 
   const generateNomorSeri = async () => {
