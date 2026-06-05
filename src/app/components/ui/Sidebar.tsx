@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/app/lib/firebase";
 
-const menuItems = [
+const allMenuItems = [
   {
     href: "/dashboard",
     label: "Dashboard",
@@ -147,6 +149,37 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [hiddenMenus, setHiddenMenus] = useState<string[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHiddenMenus = async () => {
+      if (!user?.email) {
+        setMenuLoading(false);
+        return;
+      }
+      try {
+        const q = query(collection(db, "karyawan"), where("email", "==", user.email));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const data = snap.docs[0].data();
+          setHiddenMenus(data.hiddenMenus || []);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setMenuLoading(false);
+      }
+    };
+    fetchHiddenMenus();
+  }, [user]);
+
+  const isSuperAdmin = user?.role?.trim().toUpperCase() === "SUPER ADMIN";
+
+  const visibleMenuItems = allMenuItems.filter((item) => {
+    if (isSuperAdmin) return true;
+    return !hiddenMenus.includes(item.href);
+  });
 
   const handleLogout = () => {
     if (typeof window !== "undefined" && window.confirm("Apakah Anda yakin ingin keluar?")) {
@@ -185,29 +218,38 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {menuItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`
-                  flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
-                  ${isActive ? "bg-green-700 text-white shadow-lg" : "text-green-100 hover:bg-green-800 hover:text-white"}
-                `}
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+          {menuLoading ? (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+            </div>
+          ) : (
+            visibleMenuItems.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`
+                    flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
+                    ${isActive ? "bg-green-700 text-white shadow-lg" : "text-green-100 hover:bg-green-800 hover:text-white"}
+                  `}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })
+          )}
         </nav>
 
         <div className="p-4 border-t border-green-700/50">
           <div className="mb-3 px-4 py-2 bg-green-800/50 rounded-xl">
             <p className="text-xs text-green-200">Login sebagai</p>
             <p className="text-sm font-semibold text-white truncate">{user?.nama || "Admin"}</p>
+            {user?.role && (
+              <p className="text-xs text-green-300 mt-0.5">{user.role}</p>
+            )}
           </div>
           <button
             onClick={handleLogout}
