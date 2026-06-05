@@ -582,10 +582,10 @@ export default function SuratPengangkutanPage() {
         if (item.id !== itemId) return item;
         const hasDO = item.nomorSubDO.trim() !== "";
         const doSisa = hasDO ? Math.max(0, item.doPartyKG - item.doLoadedKG) : 0;
-        const maxZAKDO = hasDO && item.bobotPerUnit > 0 ? Math.floor(doSisa / item.bobotPerUnit) : 999999;
+        const partyZAKDO = hasDO && item.bobotPerUnit > 0 ? Math.floor(doSisa / item.bobotPerUnit) : 0;
         const piSisa = Math.max(0, piKuantitas - piLoadedKG);
         const maxZAKPI = bobot > 0 ? Math.floor(piSisa / bobot) : 0;
-        const finalMaxZAK = hasDO ? Math.min(maxZAKDO, maxZAKPI) : maxZAKPI;
+        const finalMaxZAK = hasDO ? Math.min(partyZAKDO, maxZAKPI) : maxZAKPI;
         return {
           ...item,
           nomorPI: pi.nomorPI,
@@ -596,9 +596,9 @@ export default function SuratPengangkutanPage() {
           piKuantitas: piKuantitas,
           piLoadedKG: piLoadedKG,
           maxZAK: finalMaxZAK,
-          sisa: String(finalMaxZAK),
-          party: String(finalMaxZAK),
-          pengambilanZAK: finalMaxZAK > 0 ? String(finalMaxZAK) : "",
+          party: hasDO ? item.party : String(maxZAKPI),
+          sisa: hasDO ? item.party : String(maxZAKPI),
+          pengambilanZAK: "",
         };
       })
     );
@@ -631,10 +631,10 @@ export default function SuratPengangkutanPage() {
         if (item.id !== itemId) return item;
         const hasDO = item.nomorSubDO.trim() !== "";
         const doSisa = hasDO ? Math.max(0, item.doPartyKG - item.doLoadedKG) : 0;
-        const maxZAKDO = hasDO && item.bobotPerUnit > 0 ? Math.floor(doSisa / item.bobotPerUnit) : 999999;
+        const partyZAKDO = hasDO && item.bobotPerUnit > 0 ? Math.floor(doSisa / item.bobotPerUnit) : 0;
         const piSisa = Math.max(0, piKuantitas - piLoadedKG);
         const maxZAKPI = bobot > 0 ? Math.floor(piSisa / bobot) : 0;
-        const finalMaxZAK = hasDO ? Math.min(maxZAKDO, maxZAKPI) : maxZAKPI;
+        const finalMaxZAK = hasDO ? Math.min(partyZAKDO, maxZAKPI) : maxZAKPI;
         return {
           ...item,
           jenisPupuk: hasDO ? item.jenisPupuk : prod.namaProduk,
@@ -643,9 +643,9 @@ export default function SuratPengangkutanPage() {
           piKuantitas: piKuantitas,
           piLoadedKG: piLoadedKG,
           maxZAK: finalMaxZAK,
-          sisa: String(finalMaxZAK),
-          party: String(finalMaxZAK),
-          pengambilanZAK: finalMaxZAK > 0 ? String(finalMaxZAK) : "",
+          party: hasDO ? item.party : String(maxZAKPI),
+          sisa: hasDO ? item.party : String(maxZAKPI),
+          pengambilanZAK: "",
         };
       })
     );
@@ -706,15 +706,15 @@ export default function SuratPengangkutanPage() {
             if (item.id !== newId) return item;
             const hasDO = item.nomorSubDO.trim() !== "";
             const doSisa = hasDO ? Math.max(0, item.doPartyKG - item.doLoadedKG) : 0;
-            const maxZAKDO = hasDO && item.bobotPerUnit > 0 ? Math.floor(doSisa / item.bobotPerUnit) : 999999;
-            const finalMaxZAK = hasDO ? Math.min(maxZAKDO, maxZAKPI) : maxZAKPI;
+            const partyZAKDO = hasDO && item.bobotPerUnit > 0 ? Math.floor(doSisa / item.bobotPerUnit) : 0;
+            const finalMaxZAK = hasDO ? Math.min(partyZAKDO, maxZAKPI) : maxZAKPI;
             return {
               ...item,
               maxZAK: finalMaxZAK,
-              sisa: String(finalMaxZAK),
-              party: String(finalMaxZAK),
+              party: hasDO ? item.party : String(maxZAKPI),
+              sisa: hasDO ? item.party : String(maxZAKPI),
               piLoadedKG: loaded,
-              pengambilanZAK: finalMaxZAK > 0 ? String(finalMaxZAK) : "",
+              pengambilanZAK: "",
             };
           })
         );
@@ -791,14 +791,13 @@ export default function SuratPengangkutanPage() {
         const updated = { ...item, [field]: value };
         if (field === "pengambilanZAK") {
           const zak = parseFloat(value) || 0;
+          const partyZAK = parseFloat(item.party) || 0;
           if (item.maxZAK > 0 && zak > item.maxZAK) {
             updated.pengambilanZAK = String(item.maxZAK);
-            updated.sisa = "0";
-            updated.party = "0";
-          } else if (item.maxZAK > 0) {
-            const sisaZAK = Math.max(0, item.maxZAK - zak);
+            updated.sisa = String(Math.max(0, partyZAK - item.maxZAK));
+          } else if (partyZAK > 0) {
+            const sisaZAK = Math.max(0, partyZAK - zak);
             updated.sisa = String(sisaZAK);
-            updated.party = String(sisaZAK);
           }
         }
         return updated;
