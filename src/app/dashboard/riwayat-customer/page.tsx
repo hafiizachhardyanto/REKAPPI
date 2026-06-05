@@ -51,6 +51,8 @@ export default function RiwayatCustomerPage() {
   const [piList, setPiList] = useState<ProformaInvoiceData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterTahun, setFilterTahun] = useState("");
+  const [filterBulan, setFilterBulan] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerData | null>(null);
@@ -101,7 +103,21 @@ export default function RiwayatCustomerPage() {
 
   const getCustomerRows = (): CustomerRow[] => {
     return customerList.map((customer) => {
-      const customerPIs = piList.filter((pi) => pi.namaCustomer.trim().toLowerCase() === customer.namaCustomer.trim().toLowerCase());
+      let customerPIs = piList.filter((pi) => pi.namaCustomer.trim().toLowerCase() === customer.namaCustomer.trim().toLowerCase());
+      if (filterTahun) {
+        customerPIs = customerPIs.filter((pi) => {
+          if (!pi.tanggal) return false;
+          const d = new Date(pi.tanggal);
+          return String(d.getFullYear()) === filterTahun;
+        });
+      }
+      if (filterBulan) {
+        customerPIs = customerPIs.filter((pi) => {
+          if (!pi.tanggal) return false;
+          const d = new Date(pi.tanggal);
+          return String(d.getMonth() + 1) === filterBulan;
+        });
+      }
       const piDetails: PIDetail[] = customerPIs.map((pi) => ({
         nomorPI: pi.nomorPI,
         tanggal: pi.tanggal ? new Date(pi.tanggal).toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" }) : "-",
@@ -117,6 +133,22 @@ export default function RiwayatCustomerPage() {
       return { customer, piList: piDetails, tanggalRegistrasi };
     });
   };
+
+  const tahunOptions = Array.from(new Set(piList.map((pi) => pi.tanggal ? new Date(pi.tanggal).getFullYear() : null).filter((y): y is number => y !== null))).sort((a, b) => b - a);
+  const bulanOptions = [
+    { value: "1", label: "Januari" },
+    { value: "2", label: "Februari" },
+    { value: "3", label: "Maret" },
+    { value: "4", label: "April" },
+    { value: "5", label: "Mei" },
+    { value: "6", label: "Juni" },
+    { value: "7", label: "Juli" },
+    { value: "8", label: "Agustus" },
+    { value: "9", label: "September" },
+    { value: "10", label: "Oktober" },
+    { value: "11", label: "November" },
+    { value: "12", label: "Desember" },
+  ];
 
   const filteredRows = getCustomerRows().filter((row) => {
     const term = searchTerm.toLowerCase();
@@ -229,18 +261,35 @@ export default function RiwayatCustomerPage() {
       <Header title="Riwayat Customer" subtitle="Kelola daftar customer dan riwayat pemesanan" />
 
       <Card>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-          <div className="relative w-full sm:w-96">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Cari nama, alamat, ID, produk, atau nomor PI..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-            />
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+            <div className="relative w-full sm:w-72">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Cari nama, alamat, ID, produk, atau nomor PI..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <select value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)} className="px-3 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white">
+                <option value="">Semua Tahun</option>
+                {tahunOptions.map((t) => (<option key={t} value={String(t)}>{t}</option>))}
+              </select>
+              <select value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} className="px-3 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white">
+                <option value="">Semua Bulan</option>
+                {bulanOptions.map((b) => (<option key={b.value} value={b.value}>{b.label}</option>))}
+              </select>
+              {(filterTahun || filterBulan) && (
+                <button onClick={() => { setFilterTahun(""); setFilterBulan(""); }} className="px-3 py-3 text-sm text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-red-200">
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
           <Button variant="primary" onClick={() => setIsAddModalOpen(true)}>
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
