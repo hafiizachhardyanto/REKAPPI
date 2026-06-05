@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, runTransaction, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
 import Header from "@/app/components/ui/Header";
@@ -67,6 +67,8 @@ interface FormDataState {
   selectedTTD: string;
 }
 
+const COUNTER_REF = doc(db, "counters", "piCounter");
+
 export default function InputProformaInvoicePage() {
   const { user } = useAuth();
   const [stockList, setStockList] = useState<StockGudang[]>([]);
@@ -118,10 +120,11 @@ export default function InputProformaInvoicePage() {
   useEffect(() => {
     fetchStockGudang();
     fetchTTD();
+    fetchExistingPI();
     fetchCustomers();
     fetchFOT();
     generateTanggalJatuhTempo();
-    initializePINumber();
+    initializeCounter().then(() => refreshPINumber());
   }, []);
 
   useEffect(() => {
@@ -141,31 +144,50 @@ export default function InputProformaInvoicePage() {
     setFormData((prev) => ({ ...prev, tanggalJatuhTempo: dateStr }));
   };
 
-  const initializePINumber = async () => {
+  const initializeCounter = async () => {
     try {
-      const snapshot = await getDocs(collection(db, "proformaInvoice"));
-      const nomorPIs: string[] = [];
-      const nums: number[] = [];
-      
-      snapshot.docs.forEach((d) => {
-        const val = d.data().nomorPI;
-        if (typeof val === "string" && val.trim() !== "") {
-          nomorPIs.push(val.trim().toUpperCase());
-          if (val.startsWith("BAGB-PI-")) {
+      const counterSnap = await getDoc(COUNTER_REF);
+      if (!counterSnap.exists()) {
+        const snapshot = await getDocs(collection(db, "proformaInvoice"));
+        let maxNum = 0;
+        snapshot.docs.forEach((d) => {
+          const val = d.data().nomorPI;
+          if (typeof val === "string" && val.startsWith("BAGB-PI-")) {
             const num = parseInt(val.replace("BAGB-PI-", ""), 10);
-            if (!isNaN(num)) nums.push(num);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
           }
-        }
-      });
-      
-      setExistingPIList(nomorPIs);
-      
-      const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
-      const nextNum = maxNum + 1;
-      const nextPI = `BAGB-PI-${String(nextNum).padStart(3, "0")}`;
-      setFormData((prev) => ({ ...prev, nomorPI: nextPI }));
+        });
+        await setDoc(COUNTER_REF, { lastNumber: maxNum });
+      }
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const getNextPINumber = async (): Promise<string> => {
+    const nextNum = await runTransaction(db, async (transaction) => {
+      const counterDoc = await transaction.get(COUNTER_REF);
+      let lastNum = 0;
+      if (counterDoc.exists()) {
+        lastNum = counterDoc.data().lastNumber || 0;
+      }
+      const next = lastNum + 1;
+      transaction.set(COUNTER_REF, { lastNumber: next });
+      return next;
+    });
+    return `BAGB-PI-${String(nextNum).padStart(3, "0")}`;
+  };
+
+  const refreshPINumber = async (): Promise<string> => {
+    try {
+      const counterSnap = await getDoc(COUNTER_REF);
+      const lastNum = counterSnap.exists() ? (counterSnap.data().lastNumber || 0) : 0;
+      const nextPI = `BAGB-PI-${String(lastNum + 1).padStart(3, "0")}`;
+      setFormData((prev) => ({ ...prev, nomorPI: nextPI }));
+      return nextPI;
+    } catch (error) {
+      console.error(error);
+      return "";
     }
   };
 
@@ -184,6 +206,20 @@ export default function InputProformaInvoicePage() {
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TTDData));
       setTtdList(data);
+    } catch (error) { console.error(error); }
+  };
+
+  const fetchExistingPI = async () => {
+    try {
+      const snapshot = await getDocs(collection(db, "proformaInvoice"));
+      const nomorPIs: string[] = [];
+      snapshot.docs.forEach((d) => {
+        const val = d.data().nomorPI;
+        if (typeof val === "string" && val.trim() !== "") {
+          nomorPIs.push(val.trim().toUpperCase());
+        }
+      });
+      setExistingPIList(nomorPIs);
     } catch (error) { console.error(error); }
   };
 
@@ -414,13 +450,6 @@ export default function InputProformaInvoicePage() {
     if (errors[name]) {
       setErrors((prev) => { const newErrors = { ...prev }; delete newErrors[name]; return newErrors; });
     }
-    if (name === "nomorPI") {
-      if (checkDuplicatePI(value)) {
-        setErrors((prev) => ({ ...prev, nomorPI: `Nomor PI "${value.trim().toUpperCase()}" sudah terdaftar di database` }));
-      } else {
-        setErrors((prev) => { const newErrors = { ...prev }; delete newErrors.nomorPI; return newErrors; });
-      }
-    }
     setTimeout(() => calculateTotals(), 0);
   };
 
@@ -510,7 +539,6 @@ export default function InputProformaInvoicePage() {
     const newErrors: Record<string, string> = {};
     if (!formData.tanggal) newErrors.tanggal = "Tanggal wajib diisi";
     if (!formData.nomorPI.trim()) newErrors.nomorPI = "Nomor PI wajib diisi";
-    if (checkDuplicatePI(formData.nomorPI)) newErrors.nomorPI = `Nomor PI "${formData.nomorPI.trim().toUpperCase()}" sudah terdaftar di database`;
     if (!formData.namaCustomer.trim()) newErrors.namaCustomer = "Nama customer wajib diisi";
     if (!formData.alamatCustomer.trim()) newErrors.alamatCustomer = "Alamat customer wajib diisi";
     if (!formData.selectedTTD) newErrors.selectedTTD = "Tanda tangan wajib dipilih";
@@ -531,9 +559,10 @@ export default function InputProformaInvoicePage() {
     try {
       await ensureCustomerExists(formData.namaCustomer, formData.alamatCustomer, formData.npwp);
       const selectedTTD = ttdList.find((t) => t.id === formData.selectedTTD);
+      const finalNomorPI = await getNextPINumber();
       await addDoc(collection(db, "proformaInvoice"), {
         tanggal: formData.tanggal,
-        nomorPI: formData.nomorPI.trim(),
+        nomorPI: finalNomorPI,
         namaCustomer: formData.namaCustomer.trim(),
         alamatCustomer: formData.alamatCustomer.trim(),
         npwp: formData.npwp.trim(),
@@ -569,10 +598,12 @@ export default function InputProformaInvoicePage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      setExistingPIList((prev) => [...prev, finalNomorPI]);
       setSuccessMessage("Proforma Invoice berhasil disimpan!");
+      const nextPI = await refreshPINumber();
       setFormData({
         tanggal: new Date().toISOString().split("T")[0],
-        nomorPI: "",
+        nomorPI: nextPI,
         namaCustomer: "",
         alamatCustomer: "",
         npwp: "",
@@ -590,7 +621,6 @@ export default function InputProformaInvoicePage() {
       });
       setProdukItems([{ id: "1", namaProduk: "", fot: "", produsen: "", kuantitas: "", satuan: "KG", hargaSatuan: "", hargaPerZakDus: "", bobotPerUnit: 50, jumlahIsiBotol: 1, includePPN: false }]);
       generateTanggalJatuhTempo();
-      initializePINumber();
       setTimeout(() => setSuccessMessage(""), 5000);
     } catch (error) {
       console.error(error);
@@ -647,15 +677,8 @@ export default function InputProformaInvoicePage() {
             <div className="space-y-4">
               <Input label="Tanggal" type="date" name="tanggal" value={formData.tanggal} onChange={handleChange} error={errors.tanggal} required />
               <div>
-                <Input label="Nomor PI" type="text" name="nomorPI" value={formData.nomorPI} onChange={handleChange} placeholder="Contoh: BAGB-PI-0657" error={errors.nomorPI} required />
-                {checkDuplicatePI(formData.nomorPI) && (
-                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <span className="text-sm font-medium">Nomor PI sudah terdaftar, silakan gunakan nomor lain</span>
-                  </div>
-                )}
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Nomor PI <span className="text-red-500">*</span></label>
+                <input type="text" value={formData.nomorPI} readOnly className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed" />
               </div>
               <div ref={customerInputRef} className="relative">
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Nama Customer <span className="text-red-500">*</span></label>
@@ -874,7 +897,7 @@ export default function InputProformaInvoicePage() {
             generateTanggalJatuhTempo();
             setErrors({});
           }}>Reset Form</Button>
-          <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting} disabled={checkDuplicatePI(formData.nomorPI)}>Simpan Proforma Invoice</Button>
+          <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting}>Simpan Proforma Invoice</Button>
         </div>
       </form>
       <Modal isOpen={isCustomerModalOpen} onClose={() => { setIsCustomerModalOpen(false); setEditingCustomer(null); setCustomerSearch(""); }} title="Riwayat Customer" size="lg" footer={<Button variant="outline" onClick={() => { setIsCustomerModalOpen(false); setEditingCustomer(null); setCustomerSearch(""); }}>Tutup</Button>}>
