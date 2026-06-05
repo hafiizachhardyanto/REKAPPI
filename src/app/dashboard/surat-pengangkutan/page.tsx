@@ -80,6 +80,32 @@ interface FOTData {
   alamatFOT: string;
 }
 
+interface DOItem {
+  id: string;
+  nomorSubDO: string;
+  nomorPO: string;
+  namaProduk: string;
+  namaPerusahaan: string;
+  fot: string;
+  tanggalPembuatan: string;
+  tanggalKadaluarsa: string;
+  partyKG: number;
+  createdBy: string;
+  createdAt: any;
+}
+
+interface SuratDOItem {
+  nomorSubDO: string;
+  nomorPO: string;
+  pengambilanZAK: number;
+  bobotPerUnit: number;
+}
+
+interface SuratDODoc {
+  id: string;
+  items: SuratDOItem[];
+}
+
 const getRomanMonth = (month: number) => {
   const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
   return romans[month - 1] || "I";
@@ -110,6 +136,8 @@ export default function SuratPengangkutanPage() {
   const [stockList, setStockList] = useState<StockItem[]>([]);
   const [existingSuratList, setExistingSuratList] = useState<ExistingSurat[]>([]);
   const [fotList, setFotList] = useState<FOTData[]>([]);
+  const [doList, setDoList] = useState<DOItem[]>([]);
+  const [suratDOList, setSuratDOList] = useState<SuratDODoc[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -139,6 +167,8 @@ export default function SuratPengangkutanPage() {
     fetchStockGudang();
     fetchExistingSurat();
     fetchFOT();
+    fetchDO();
+    fetchSuratDO();
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -191,6 +221,99 @@ export default function SuratPengangkutanPage() {
       setFotList(data);
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const fetchDO = async () => {
+    try {
+      const q = query(collection(db, "do"), orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      } as DOItem));
+      setDoList(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const fetchSuratDO = async () => {
+    try {
+      const q = query(collection(db, "suratPengangkutan"), where("jenisSurat", "==", "do"));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        items: doc.data().items || [],
+      } as SuratDODoc));
+      setSuratDOList(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const getLoadedKGForDO = (nomorSubDO: string, nomorPO: string) => {
+    let total = 0;
+    suratDOList.forEach((surat) => {
+      surat.items.forEach((item) => {
+        if (item.nomorSubDO === nomorSubDO && item.nomorPO === nomorPO) {
+          total += (item.pengambilanZAK || 0) * (item.bobotPerUnit || 50);
+        }
+      });
+    });
+    return total;
+  };
+
+  const getSisaDO = (doItem: DOItem) => {
+    const loaded = getLoadedKGForDO(doItem.nomorSubDO, doItem.nomorPO);
+    return Math.max(0, (doItem.partyKG || 0) - loaded);
+  };
+
+  const getAvailableDO = (currentItemId: number) => {
+    return doList.filter((doItem) => {
+      const sisa = getSisaDO(doItem);
+      const usedInOtherItem = items.find((it) => it.id !== currentItemId && it.nomorSubDO === doItem.nomorSubDO && it.nomorPO === doItem.nomorPO);
+      if (usedInOtherItem) return false;
+      return sisa > 0;
+    });
+  };
+
+  const handleSubDOSelect = (itemId: number, nomorSubDO: string) => {
+    const doItem = doList.find((d) => d.nomorSubDO === nomorSubDO);
+    if (!doItem) return;
+    const stock = getStockForProduct(doItem.namaProduk);
+    const bobot = stock ? stock.bobotPerUnit : 50;
+    const sisaKG = getSisaDO(doItem);
+    const maxZAK = Math.floor(sisaKG / bobot);
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          nomorSubDO: doItem.nomorSubDO,
+          nomorPO: doItem.nomorPO,
+          jenisPupuk: doItem.namaProduk,
+          fot: doItem.fot,
+          bobotPerUnit: bobot,
+          maxZAK: maxZAK,
+          sisa: String(maxZAK),
+          party: String(maxZAK),
+          pengambilanZAK: maxZAK > 0 ? String(maxZAK) : "",
+          kuantitasOrdered: doItem.partyKG,
+          loadedKG: doItem.partyKG - sisaKG,
+          namaCustomer: doItem.namaPerusahaan,
+        };
+      })
+    );
+
+    if (!formData.kepadaPerusahaan.trim()) {
+      const matchedFOT = fotList.find((f) => f.namaFOT.toUpperCase() === doItem.namaPerusahaan.toUpperCase());
+      setFormData((prev) => ({
+        ...prev,
+        kepadaPerusahaan: doItem.namaPerusahaan,
+        kepadaAlamat: matchedFOT ? matchedFOT.alamatFOT : "",
+      }));
     }
   };
 
@@ -627,9 +750,11 @@ export default function SuratPengangkutanPage() {
           if (item.maxZAK > 0 && zak > item.maxZAK) {
             updated.pengambilanZAK = String(item.maxZAK);
             updated.sisa = "0";
+            updated.party = "0";
           } else if (item.maxZAK > 0) {
             const sisaZAK = Math.max(0, item.maxZAK - zak);
             updated.sisa = String(sisaZAK);
+            updated.party = String(sisaZAK);
           }
         }
         return updated;
@@ -665,7 +790,7 @@ export default function SuratPengangkutanPage() {
       if (!item.nomorPI.trim()) newErrors[`nomorPI_${idx}`] = "Nomor PI wajib dipilih";
       if (!item.jenisPupuk.trim()) newErrors[`jenisPupuk_${idx}`] = "Jenis pupuk wajib diisi";
       if (isMandiri) {
-        if (!item.nomorSubDO.trim()) newErrors[`nomorSubDO_${idx}`] = "Nomor Sub DO wajib diisi";
+        if (!item.nomorSubDO.trim()) newErrors[`nomorSubDO_${idx}`] = "Nomor Sub DO wajib dipilih";
         if (!item.nomorPO.trim()) newErrors[`nomorPO_${idx}`] = "Nomor PO wajib diisi";
         if (!item.party.trim()) newErrors[`party_${idx}`] = "Party wajib diisi";
       }
@@ -699,7 +824,7 @@ export default function SuratPengangkutanPage() {
     if (jenisSurat === "do" && isMandiri) {
       const firstItem = items.find((it) => it.nomorSubDO.trim() !== "");
       if (!firstItem || !firstItem.nomorSubDO.trim()) {
-        newErrors.nomorSubDO = "Nomor Sub DO wajib diisi untuk generate nomor seri";
+        newErrors.nomorSubDO = "Nomor Sub DO wajib dipilih untuk generate nomor seri";
       }
       const perusahaan = formData.kepadaPerusahaan.trim();
       if (!perusahaan) {
@@ -863,6 +988,7 @@ export default function SuratPengangkutanPage() {
       resetForm();
       fetchExistingSurat();
       fetchStockGudang();
+      fetchSuratDO();
       setTimeout(() => setSuccessMessage(""), 5000);
     } catch (error) {
       console.error(error);
@@ -1295,10 +1421,25 @@ export default function SuratPengangkutanPage() {
                     )}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {!isGI && !isDikuasakan && (
+                    {isMandiri && (
                       <>
-                        <Input label="Nomor SUB DO" type="text" value={item.nomorSubDO} onChange={(e) => handleItemChange(item.id, "nomorSubDO", e.target.value)} placeholder="Wajib" error={errors[`nomorSubDO_${idx}`]} required />
-                        <Input label="Nomor PO" type="text" value={item.nomorPO} onChange={(e) => handleItemChange(item.id, "nomorPO", e.target.value)} placeholder="Wajib" error={errors[`nomorPO_${idx}`]} required />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">Nomor SUB DO <span className="text-red-500">*</span></label>
+                          <select
+                            value={item.nomorSubDO}
+                            onChange={(e) => handleSubDOSelect(item.id, e.target.value)}
+                            className={`w-full px-4 py-3 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${errors[`nomorSubDO_${idx}`] ? "border-red-500" : "border-gray-300"}`}
+                          >
+                            <option value="">Pilih DO...</option>
+                            {getAvailableDO(item.id).map((doItem) => (
+                              <option key={doItem.id} value={doItem.nomorSubDO}>
+                                {doItem.nomorSubDO} - {doItem.nomorPO} - {doItem.namaProduk} (Sisa: {getSisaDO(doItem).toLocaleString()} KG)
+                              </option>
+                            ))}
+                          </select>
+                          {errors[`nomorSubDO_${idx}`] && <p className="mt-1 text-sm text-red-600">{errors[`nomorSubDO_${idx}`]}</p>}
+                        </div>
+                        <Input label="Nomor PO" type="text" value={item.nomorPO} readOnly />
                       </>
                     )}
                     <div className="md:col-span-3">
@@ -1393,8 +1534,8 @@ export default function SuratPengangkutanPage() {
                     <div className="md:col-span-3">
                       <Input label="Jenis Pupuk" type="text" value={item.jenisPupuk} onChange={(e) => handleItemChange(item.id, "jenisPupuk", e.target.value)} placeholder="Pilih produk dari PI" error={errors[`jenisPupuk_${idx}`]} required readOnly />
                     </div>
-                    {!isGI && !isDikuasakan && (
-                      <Input label="Party" type="text" value={item.party} onChange={(e) => handleItemChange(item.id, "party", e.target.value)} placeholder="Wajib" error={errors[`party_${idx}`]} required />
+                    {isMandiri && (
+                      <Input label="Party (ZAK)" type="text" value={item.party} readOnly />
                     )}
                     <div>
                       <Input label={`Pengambilan (ZAK)${item.maxZAK > 0 ? ` - Max: ${item.maxZAK}` : ""}`} type="number" value={item.pengambilanZAK} onChange={(e) => handleItemChange(item.id, "pengambilanZAK", e.target.value)} placeholder={item.maxZAK > 0 ? `Max ${item.maxZAK} ZAK` : "Contoh: 100"} />
