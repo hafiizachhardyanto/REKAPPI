@@ -319,7 +319,7 @@ export default function SuratPengangkutanPage() {
           doLoadedKG: loadedDO,
           maxZAK: finalMaxZAK,
           sisa: String(finalMaxZAK),
-          party: String(finalMaxZAK),
+          party: formatParty(doItem.partyKG),
           pengambilanZAK: finalMaxZAK > 0 ? String(finalMaxZAK) : "",
           namaCustomer: doItem.namaPerusahaan,
         };
@@ -1173,7 +1173,7 @@ export default function SuratPengangkutanPage() {
           <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
         </div>
         <div class="page">
-          <img src="/Picture3.png" alt="Header" class="header-img" onerror="this.style.display='none'" />
+          <img src="/Picture3.png" alt="Header" class="header-img" onerror="this.style.display=\'none\'" />
           <div class="title-bar">SURAT PENGANGKUTAN</div>
           <div class="info-section">
             <div class="info-row">
@@ -1238,7 +1238,7 @@ export default function SuratPengangkutanPage() {
           <div class="signature-row">
             <div class="signature-box">
               <p class="signature-title">Hormat Kami,<br>PT. BUKIT AGROCHEMICAL BARU</p>
-              <img src="/Picture2.png" alt="TTD" class="signature-img" onerror="this.style.display='none'" />
+              <img src="/Picture2.png" alt="TTD" class="signature-img" onerror="this.style.display=\'none\'" />
               <p class="signature-name">HENDRA PRAMASYANTO</p>
             </div>
             <div class="signature-box">
@@ -1247,7 +1247,7 @@ export default function SuratPengangkutanPage() {
               <p class="signature-name">${formData.driverUnit || ""}</p>
             </div>
           </div>
-          <img src="/Picture1.png" alt="Footer" class="footer-img" onerror="this.style.display='none'" />
+          <img src="/Picture1.png" alt="Footer" class="footer-img" onerror="this.style.display=\'none\'" />
         </div>
       </body>
       </html>
