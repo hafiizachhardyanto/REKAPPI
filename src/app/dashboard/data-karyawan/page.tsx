@@ -35,6 +35,8 @@ const menuOptions = [
   { key: "/dashboard", label: "Dashboard" },
   { key: "/dashboard/input-proforma-invoice", label: "Input PI" },
   { key: "/dashboard/rekap-proforma-invoice", label: "Rekap PI" },
+  { key: "/dashboard/arsip-invoice", label: "Arsip Invoice" },
+  { key: "/dashboard/arsip-invoice-sementara", label: "Arsip Invoice Sementara" },
   { key: "/dashboard/laporan-stock-gudang", label: "Laporan & Input Stock" },
   { key: "/dashboard/transaksi-barang-masuk", label: "Barang Masuk" },
   { key: "/dashboard/input-do", label: "Input DO" },

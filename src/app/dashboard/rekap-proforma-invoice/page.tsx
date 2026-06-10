@@ -253,6 +253,7 @@ export default function RekapProformaInvoicePage() {
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceSurat, setInvoiceSurat] = useState<SuratMuatInfo | null>(null);
   const [selectedOrderTTD, setSelectedOrderTTD] = useState("");
+  const [selectedHormatTTD, setSelectedHormatTTD] = useState("");
   const [invoiceNomor, setInvoiceNomor] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
@@ -657,6 +658,7 @@ export default function RekapProformaInvoicePage() {
     setSelectedItem(row);
     setInvoiceSurat(null);
     setSelectedOrderTTD("");
+    setSelectedHormatTTD("");
     setInvoiceNomor("");
     setInvoiceDate("");
     setIsInvoiceModalOpen(true);
@@ -681,6 +683,7 @@ export default function RekapProformaInvoicePage() {
   const handleOpenInvoice = async (surat: SuratMuatInfo) => {
     setInvoiceSurat(surat);
     setSelectedOrderTTD("");
+    setSelectedHormatTTD("");
     setInvoiceNomor("");
     setInvoiceDate(surat.tanggal);
     setIsInvoiceModalOpen(true);
@@ -728,6 +731,187 @@ export default function RekapProformaInvoicePage() {
       setInvoiceExists(false);
       fetchData();
     } catch (error) { console.error(error); }
+  };
+
+  const handleRegenerateInvoice = async () => {
+    if (!selectedItem) return;
+    if (!confirm("Regenerate nomor invoice? Nomor lama akan dikembalikan ke pool.")) return;
+    setIsGeneratingInvoice(true);
+    try {
+      const piRef = doc(db, "proformaInvoice", selectedItem.id);
+      await updateDoc(piRef, { invoiceBaseNumber: null, updatedAt: serverTimestamp() });
+      const baseNumber = await getNextInvoiceBaseNumber();
+      await updateDoc(piRef, { invoiceBaseNumber: baseNumber, updatedAt: serverTimestamp() });
+      const nomor = `BAGB-INV-${baseNumber}`;
+      setInvoiceNomor(nomor);
+    } catch (error) { console.error(error); } finally { setIsGeneratingInvoice(false); }
+  };
+
+  const handleRegenerateInvoiceSementara = async () => {
+    if (!selectedItem || !invoiceSurat) return;
+    if (!confirm("Regenerate nomor invoice sementara?")) return;
+    setIsGeneratingInvoice(true);
+    try {
+      const suratRef = doc(db, "suratPengangkutan", invoiceSurat.id);
+      await updateDoc(suratRef, { nomorInvoice: null, updatedAt: serverTimestamp() });
+      const nomor = await generateInvoiceNumber(invoiceSurat);
+      setInvoiceNomor(nomor);
+    } catch (error) { console.error(error); } finally { setIsGeneratingInvoice(false); }
+  };
+
+  const handleTerbitkanInvoice = async () => {
+    if (!selectedItem || !invoiceNomor || !selectedOrderTTD || !selectedHormatTTD) {
+      alert("Pilih TTD untuk Diorder Oleh dan Hormat Kami terlebih dahulu.");
+      return;
+    }
+    const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
+    const hormatTTD = ttdList.find((t) => t.id === selectedHormatTTD);
+    if (!orderTTD || !hormatTTD) return;
+    setIsSubmitting(true);
+    try {
+      const pi = selectedItem;
+      const allSuratForPI = getSuratMuatForPI(pi.nomorPI);
+      const invoiceItems = pi.produkItems.map((produk, idx) => {
+        let loadedQty = 0;
+        allSuratForPI.forEach((surat) => {
+          (surat.items || []).forEach((it) => {
+            const itemPI = it.nomorPI || "";
+            if (itemPI && itemPI !== pi.nomorPI) return;
+            const match = it.jenisPupuk.toUpperCase().includes(produk.namaProduk.toUpperCase()) || produk.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase());
+            if (match) {
+              const bobot = it.bobotPerUnit || produk.bobotPerUnit || 50;
+              loadedQty += (it.pengambilanZAK || 0) * bobot;
+            }
+          });
+        });
+        return {
+          no: idx + 1,
+          namaProduk: produk.namaProduk,
+          produsen: produk.produsen || "",
+          kemasan: produk.bobotPerUnit ? `${produk.bobotPerUnit} KG` : "-",
+          fot: produk.fot || "",
+          kuantitas: loadedQty,
+          satuan: "KG",
+          hargaSatuan: produk.hargaSatuan || 0,
+          hargaPerZakDus: produk.hargaPerZakDus || 0,
+          subTotal: loadedQty * (produk.hargaSatuan || 0),
+        };
+      }).filter((it) => it.kuantitas > 0).map((it, idx) => ({ ...it, no: idx + 1 }));
+      const totalSubTotal = invoiceItems.reduce((sum, it) => sum + it.subTotal, 0);
+      const ppn = pi.includePPN ? totalSubTotal * 0.11 : 0;
+      const totalPembayaran = totalSubTotal + ppn + (pi.ongkosKirim || 0);
+      await addDoc(collection(db, "arsipInvoice"), {
+        nomorInvoice: invoiceNomor,
+        tanggalInvoice: invoiceDate || pi.tanggal,
+        nomorPI: pi.nomorPI,
+        namaCustomer: pi.namaCustomer,
+        alamatCustomer: pi.alamatCustomer,
+        npwp: pi.npwp || "",
+        produkItems: pi.produkItems,
+        invoiceItems: invoiceItems,
+        subtotal: totalSubTotal,
+        ppnNominal: ppn,
+        ongkosKirim: pi.ongkosKirim || 0,
+        jumlahTertagih: totalPembayaran,
+        terbilang: numberToWords(Math.round(totalPembayaran)),
+        riwayatPengangkutan: allSuratForPI.map((s) => ({
+          nomorSeri: s.nomorSeri,
+          tanggal: s.tanggal,
+          driverUnit: s.driverUnit,
+          nomorPolisi: s.nomorPolisi,
+          items: s.items,
+          totalKG: s.totalKG,
+        })),
+        ttdOrderId: selectedOrderTTD,
+        ttdOrderNama: orderTTD.nama,
+        ttdOrderJabatan: orderTTD.jabatan,
+        ttdOrderImage: orderTTD.ttdImage,
+        ttdHormatId: selectedHormatTTD,
+        ttdHormatNama: hormatTTD.nama,
+        ttdHormatJabatan: hormatTTD.jabatan,
+        ttdHormatImage: hormatTTD.ttdImage,
+        createdAt: serverTimestamp(),
+      });
+      setIsInvoiceModalOpen(false);
+      alert("Invoice berhasil diterbitkan!");
+    } catch (error) { console.error(error); alert("Gagal menerbitkan invoice."); } finally { setIsSubmitting(false); }
+  };
+
+  const handleTerbitkanInvoiceSementara = async () => {
+    if (!selectedItem || !invoiceSurat || !invoiceNomor || !selectedOrderTTD || !selectedHormatTTD) {
+      alert("Pilih TTD untuk Diorder Oleh dan Hormat Kami terlebih dahulu.");
+      return;
+    }
+    const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
+    const hormatTTD = ttdList.find((t) => t.id === selectedHormatTTD);
+    if (!orderTTD || !hormatTTD) return;
+    setIsSubmitting(true);
+    try {
+      const pi = selectedItem;
+      const surat = invoiceSurat;
+      const invoiceItems = pi.produkItems.map((produk, idx) => {
+        let loadedQty = 0;
+        (surat.items || []).forEach((it) => {
+          const itemPI = it.nomorPI || "";
+          if (itemPI && itemPI !== pi.nomorPI) return;
+          const match = it.jenisPupuk.toUpperCase().includes(produk.namaProduk.toUpperCase()) || produk.namaProduk.toUpperCase().includes(it.jenisPupuk.toUpperCase());
+          if (match) {
+            const bobot = it.bobotPerUnit || produk.bobotPerUnit || 50;
+            loadedQty += (it.pengambilanZAK || 0) * bobot;
+          }
+        });
+        return {
+          no: idx + 1,
+          namaProduk: produk.namaProduk,
+          produsen: produk.produsen || "",
+          kemasan: produk.bobotPerUnit ? `${produk.bobotPerUnit} KG` : "-",
+          fot: produk.fot || "",
+          kuantitas: loadedQty,
+          satuan: "KG",
+          hargaSatuan: produk.hargaSatuan || 0,
+          hargaPerZakDus: produk.hargaPerZakDus || 0,
+          subTotal: loadedQty * (produk.hargaSatuan || 0),
+        };
+      }).filter((it) => it.kuantitas > 0).map((it, idx) => ({ ...it, no: idx + 1 }));
+      const totalSubTotal = invoiceItems.reduce((sum, it) => sum + it.subTotal, 0);
+      const ppn = pi.includePPN ? totalSubTotal * 0.11 : 0;
+      const totalPembayaran = totalSubTotal + ppn + (pi.ongkosKirim || 0);
+      await addDoc(collection(db, "arsipInvoiceSementara"), {
+        nomorInvoice: invoiceNomor,
+        tanggalInvoice: invoiceDate || surat.tanggal,
+        nomorPI: pi.nomorPI,
+        nomorSeriSP: surat.nomorSeri,
+        namaCustomer: pi.namaCustomer,
+        alamatCustomer: pi.alamatCustomer,
+        npwp: pi.npwp || "",
+        produkItems: pi.produkItems,
+        invoiceItems: invoiceItems,
+        suratPengangkutan: {
+          nomorSeri: surat.nomorSeri,
+          tanggal: surat.tanggal,
+          driverUnit: surat.driverUnit,
+          nomorPolisi: surat.nomorPolisi,
+          items: surat.items,
+          totalKG: surat.totalKG,
+        },
+        subtotal: totalSubTotal,
+        ppnNominal: ppn,
+        ongkosKirim: pi.ongkosKirim || 0,
+        jumlahTertagih: totalPembayaran,
+        terbilang: numberToWords(Math.round(totalPembayaran)),
+        ttdOrderId: selectedOrderTTD,
+        ttdOrderNama: orderTTD.nama,
+        ttdOrderJabatan: orderTTD.jabatan,
+        ttdOrderImage: orderTTD.ttdImage,
+        ttdHormatId: selectedHormatTTD,
+        ttdHormatNama: hormatTTD.nama,
+        ttdHormatJabatan: hormatTTD.jabatan,
+        ttdHormatImage: hormatTTD.ttdImage,
+        createdAt: serverTimestamp(),
+      });
+      setIsInvoiceModalOpen(false);
+      alert("Invoice sementara berhasil diterbitkan!");
+    } catch (error) { console.error(error); alert("Gagal menerbitkan invoice sementara."); } finally { setIsSubmitting(false); }
   };
 
   const filteredData = data.filter((item) => {
@@ -844,7 +1028,6 @@ export default function RekapProformaInvoicePage() {
   const handleUpdateSurat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSurat || !selectedItem) return;
-
     setIsSubmitting(true);
     try {
       const oldItems = selectedSurat.items || [];
@@ -880,9 +1063,7 @@ export default function RekapProformaInvoicePage() {
       const transaksiQuery = query(collection(db, "transaksiBarangKeluar"), where("nomorSeri", "==", selectedSurat.nomorSeri));
       const transaksiSnapshot = await getDocs(transaksiQuery);
       if (!transaksiSnapshot.empty) {
-        await updateDoc(doc(db, "transaksiBarangKeluar", transaksiSnapshot.docs[0].id), {
-          ...updateData,
-          });
+        await updateDoc(doc(db, "transaksiBarangKeluar", transaksiSnapshot.docs[0].id), { ...updateData });
       }
       const oldTotalKG = oldItems.reduce((sum, it) => sum + ((it.pengambilanZAK || 0) * (it.bobotPerUnit || 50)), 0);
       const delta = oldTotalKG - totalPengambilanKG;
@@ -1578,7 +1759,6 @@ export default function RekapProformaInvoicePage() {
       `
       )
       .join("");
-
     let recipientBox = "";
     if (isGI) {
       recipientBox = `<div class="recipient-box">
@@ -1602,7 +1782,6 @@ export default function RekapProformaInvoicePage() {
         <p class="recipient-address">${(surat.kepadaAlamat || "").replace(/\n/g, "<br>")}</p>
       </div>`;
     }
-
     const html = `
       <!DOCTYPE html>
       <html>
@@ -1734,9 +1913,9 @@ export default function RekapProformaInvoicePage() {
     if (!selectedItem || !invoiceNomor) return;
     const pi = selectedItem;
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
+    const hormatTTD = ttdList.find((t) => t.id === selectedHormatTTD);
     const allSuratForPI = getSuratMuatForPI(pi.nomorPI);
     const tanggalInvoice = invoiceDate || pi.tanggal;
-
     const invoiceItems = pi.produkItems
       .map((produk, idx) => {
         let loadedQty = 0;
@@ -1786,13 +1965,11 @@ export default function RekapProformaInvoicePage() {
       })
       .filter((it) => !invoiceSurat || it.kuantitas > 0)
       .map((it, idx) => ({ ...it, no: idx + 1 }));
-
     const totalSubTotal = invoiceItems.reduce((sum, it) => sum + it.subTotal, 0);
     const dppNilaiLain = 0;
     const ongkosKirim = pi.ongkosKirim || 0;
     const ppn = pi.includePPN ? totalSubTotal * 0.11 : 0;
     const totalPembayaran = totalSubTotal + dppNilaiLain + ongkosKirim + ppn;
-
     const itemsHtml = invoiceItems.map((it) => `
       <tr>
         <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${it.no}</td>
@@ -1806,7 +1983,6 @@ export default function RekapProformaInvoicePage() {
         <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top; font-weight: 600;">${formatRupiah(it.subTotal)}</td>
       </tr>
     `).join("");
-
     const emptyRows = Array.from({ length: Math.max(0, 8 - invoiceItems.length) }, (_, i) => `
       <tr>
         <td style="text-align: center; padding: 6px 4px; font-size: 10px; border: 1px solid #000; vertical-align: top;">${invoiceItems.length + i + 1}</td>
@@ -1820,10 +1996,8 @@ export default function RekapProformaInvoicePage() {
         <td style="text-align: right; padding: 6px 8px; font-size: 10px; border: 1px solid #000; vertical-align: top;">&nbsp;</td>
       </tr>
     `).join("");
-
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-
     const html = `
       <!DOCTYPE html>
       <html>
@@ -1948,9 +2122,9 @@ export default function RekapProformaInvoicePage() {
             </div>
             <div class="right-signature">
               <p style="margin-bottom: 30px;">Hormat kami,<br>PT. Bukit Agrochemical Baru</p>
-              <img src="/Picture4.png" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display=\'none\'" />
-              <p style="font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">Sri Setyo Wibowo</p>
-              <p>Manager Keuangan</p>
+              ${hormatTTD ? `<img src="${hormatTTD.ttdImage}" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" />` : `<img src="/Picture4.png" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display=\'none\'" />`}
+              <p style="font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${hormatTTD ? hormatTTD.nama : "Sri Setyo Wibowo"}</p>
+              <p>${hormatTTD ? hormatTTD.jabatan : "Manager Keuangan"}</p>
             </div>
           </div>
           <img src="/Picture1.png" alt="Footer" class="footer-img" onerror="this.style.display=\'none\'" />
@@ -2077,7 +2251,7 @@ export default function RekapProformaInvoicePage() {
     {
       key: "invoice",
       header: "Invoice",
-      width: "120px",
+      width: "200px",
       render: (row: ProformaInvoice) => {
         const status = getStatusPengangkutan(row);
         const isComplete = status === "complete";
@@ -2088,17 +2262,24 @@ export default function RekapProformaInvoicePage() {
         else if (!isPaid) title = "Menunggu pelunasan";
         else title = "Print Invoice Full";
         return (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleOpenFullInvoice(row); }}
-            disabled={!canInvoice}
-            className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
-              canInvoice ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer" : "bg-gray-200 text-gray-400 cursor-not-allowed"
-            }`}
-            title={title}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            Invoice
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleOpenFullInvoice(row); }}
+              disabled={!canInvoice}
+              className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
+                canInvoice ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer" : "bg-gray-200 text-gray-400 cursor-not-allowed"
+              }`}
+              title={title}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              Invoice
+            </button>
+            {row.invoiceBaseNumber && (
+              <button onClick={(e) => { e.stopPropagation(); handleOpenFullInvoice(row); }} className="px-2 py-1 rounded-md text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors" title="Terbitkan Ulang">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              </button>
+            )}
+          </div>
         );
       },
     },
@@ -2605,13 +2786,23 @@ export default function RekapProformaInvoicePage() {
           </div>
         </form>
       </Modal>
-      <Modal isOpen={isInvoiceModalOpen} onClose={() => setIsInvoiceModalOpen(false)} title="Print Invoice" size="md" footer={
-        <div className="flex justify-end gap-3">
+      <Modal isOpen={isInvoiceModalOpen} onClose={() => setIsInvoiceModalOpen(false)} title={invoiceSurat ? "Print Invoice Sementara" : "Print Invoice"} size="md" footer={
+        <div className="flex justify-end gap-3 flex-wrap">
+          {invoiceSurat ? (
+            <Button variant="secondary" onClick={handleRegenerateInvoiceSementara} disabled={isGeneratingInvoice}>Regenerate</Button>
+          ) : (
+            <Button variant="secondary" onClick={handleRegenerateInvoice} disabled={isGeneratingInvoice}>Regenerate</Button>
+          )}
           {invoiceExists && (
             <Button variant="danger" onClick={() => { if (selectedItem) handleResetInvoice(selectedItem.nomorPI); setIsInvoiceModalOpen(false); }}>Reset Invoice</Button>
           )}
           <Button variant="outline" onClick={() => setIsInvoiceModalOpen(false)}>Batal</Button>
-          <Button variant="primary" onClick={handlePrintInvoice} disabled={!selectedOrderTTD || !invoiceNomor || isGeneratingInvoice}>Print Invoice</Button>
+          {invoiceSurat ? (
+            <Button variant="primary" onClick={handleTerbitkanInvoiceSementara} disabled={!selectedOrderTTD || !selectedHormatTTD || !invoiceNomor || isGeneratingInvoice || isSubmitting} isLoading={isSubmitting}>Terbitkan</Button>
+          ) : (
+            <Button variant="primary" onClick={handleTerbitkanInvoice} disabled={!selectedOrderTTD || !selectedHormatTTD || !invoiceNomor || isGeneratingInvoice || isSubmitting} isLoading={isSubmitting}>Terbitkan</Button>
+          )}
+          <Button variant="primary" onClick={handlePrintInvoice} disabled={!selectedOrderTTD || !selectedHormatTTD || !invoiceNomor || isGeneratingInvoice}>Print</Button>
         </div>
       }>
         <div className="space-y-4">
@@ -2629,11 +2820,30 @@ export default function RekapProformaInvoicePage() {
             <p className="text-sm text-blue-700"><span className="font-semibold">Dipesan Oleh:</span> {selectedItem?.namaCustomer || "-"}</p>
           </div>
           <p className="text-sm text-gray-600">Pilih TTD untuk bagian <strong>Diorder Oleh</strong>:</p>
-          <Select label="Pilih TTD" value={selectedOrderTTD} onChange={(e) => setSelectedOrderTTD(e.target.value)} options={[{ value: "", label: "Pilih tanda tangan..." }, ...ttdList.map((ttd) => ({ value: ttd.id, label: `${ttd.nama} - ${ttd.jabatan}` }))]} />
+          <Select label="Pilih TTD Diorder Oleh" value={selectedOrderTTD} onChange={(e) => setSelectedOrderTTD(e.target.value)} options={[{ value: "", label: "Pilih tanda tangan..." }, ...ttdList.map((ttd) => ({ value: ttd.id, label: `${ttd.nama} - ${ttd.jabatan}` }))]} />
           {selectedOrderTTD && (
             <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center gap-4">
               {(() => {
                 const ttd = ttdList.find((t) => t.id === selectedOrderTTD);
+                if (!ttd) return null;
+                return (
+                  <>
+                    <img src={ttd.ttdImage} alt="TTD" className="h-16 object-contain bg-white rounded-lg border border-gray-200" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{ttd.nama}</p>
+                      <p className="text-xs text-gray-500">{ttd.jabatan}</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+          <p className="text-sm text-gray-600">Pilih TTD untuk bagian <strong>Hormat Kami</strong>:</p>
+          <Select label="Pilih TTD Hormat Kami" value={selectedHormatTTD} onChange={(e) => setSelectedHormatTTD(e.target.value)} options={[{ value: "", label: "Pilih tanda tangan..." }, ...ttdList.map((ttd) => ({ value: ttd.id, label: `${ttd.nama} - ${ttd.jabatan}` }))]} />
+          {selectedHormatTTD && (
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center gap-4">
+              {(() => {
+                const ttd = ttdList.find((t) => t.id === selectedHormatTTD);
                 if (!ttd) return null;
                 return (
                   <>
