@@ -580,6 +580,7 @@ export default function SuratPengangkutanPage() {
       })
     );
     setPiProductStatus((prev) => ({ ...prev, [pi.nomorPI]: statusMap }));
+    return statusMap;
   };
 
   const handlePISelectForItem = async (itemId: number, pi: ProformaInvoice) => {
@@ -712,7 +713,9 @@ export default function SuratPengangkutanPage() {
 
   const addItemWithPI = async (pi: ProformaInvoice) => {
     const validProducts = getValidProductsForPI(pi);
-    const firstProd = validProducts[0];
+    const statusMap = await loadProductStatusForPI(pi);
+    const availableProducts = validProducts.filter((prod) => statusMap[prod.namaProduk]?.status !== "complete");
+    const firstProd = availableProducts[0];
     const newId = items.length > 0 ? Math.max(...items.map((i) => i.id)) + 1 : 1;
     const bobot = firstProd ? getBobotPerUnit(firstProd.namaProduk) : 50;
     const fot = firstProd ? (firstProd.fot || getStockFotForProduct(firstProd.namaProduk) || "").trim() : "";
@@ -722,53 +725,54 @@ export default function SuratPengangkutanPage() {
 
     if (firstProd) {
       piKuantitas = firstProd.kuantitas || 0;
-      getLoadedKGForPIProduct(pi.nomorPI, firstProd.namaProduk).then((loaded) => {
-        piLoadedKG = loaded;
-        const piSisa = Math.max(0, piKuantitas - loaded);
-        const maxZAKPI = bobot > 0 ? Math.floor(piSisa / bobot) : 0;
+      piLoadedKG = statusMap[firstProd.namaProduk]?.loaded || 0;
+      const piSisa = Math.max(0, piKuantitas - piLoadedKG);
+      const maxZAKPI = bobot > 0 ? Math.floor(piSisa / bobot) : 0;
 
-        setItems((prev) =>
-          prev.map((item) => {
-            if (item.id !== newId) return item;
-            const hasDO = item.nomorSubDO.trim() !== "";
-            const doSisa = hasDO ? Math.max(0, item.doPartyKG - item.doLoadedKG) : 0;
-            const partyZAKDO = hasDO && item.bobotPerUnit > 0 ? Math.floor(doSisa / item.bobotPerUnit) : 0;
-            const finalMaxZAK = hasDO ? Math.min(partyZAKDO, maxZAKPI) : maxZAKPI;
-            return {
-              ...item,
-              maxZAK: finalMaxZAK,
-              party: hasDO ? item.party : formatParty(piKuantitas),
-              sisa: hasDO ? String(partyZAKDO) : String(maxZAKPI),
-              piLoadedKG: loaded,
-              pengambilanZAK: "",
-            };
-          })
-        );
-      });
+      setItems((prev) => [
+        ...prev,
+        {
+          id: newId,
+          nomorSubDO: "",
+          nomorPO: "",
+          jenisPupuk: firstProd.namaProduk,
+          party: formatParty(piKuantitas),
+          pengambilanZAK: "",
+          sisa: String(maxZAKPI),
+          bobotPerUnit: bobot,
+          maxZAK: maxZAKPI,
+          fot: fot,
+          nomorPI: pi.nomorPI,
+          namaCustomer: pi.namaCustomer,
+          doPartyKG: 0,
+          doLoadedKG: 0,
+          piKuantitas: piKuantitas,
+          piLoadedKG: piLoadedKG,
+        },
+      ]);
+    } else {
+      setItems((prev) => [
+        ...prev,
+        {
+          id: newId,
+          nomorSubDO: "",
+          nomorPO: "",
+          jenisPupuk: "",
+          party: "",
+          pengambilanZAK: "",
+          sisa: "",
+          bobotPerUnit: 50,
+          maxZAK: 0,
+          fot: "",
+          nomorPI: pi.nomorPI,
+          namaCustomer: pi.namaCustomer,
+          doPartyKG: 0,
+          doLoadedKG: 0,
+          piKuantitas: 0,
+          piLoadedKG: 0,
+        },
+      ]);
     }
-
-    setItems((prev) => [
-      ...prev,
-      {
-        id: newId,
-        nomorSubDO: "",
-        nomorPO: "",
-        jenisPupuk: firstProd ? firstProd.namaProduk : "",
-        party: "",
-        pengambilanZAK: "",
-        sisa: "",
-        bobotPerUnit: bobot,
-        maxZAK: 0,
-        fot: fot,
-        nomorPI: pi.nomorPI,
-        namaCustomer: pi.namaCustomer,
-        doPartyKG: 0,
-        doLoadedKG: 0,
-        piKuantitas: piKuantitas,
-        piLoadedKG: piLoadedKG,
-      },
-    ]);
-    await loadProductStatusForPI(pi);
   };
 
   const removeItem = (id: number) => {
@@ -1619,7 +1623,17 @@ export default function SuratPengangkutanPage() {
                       <Input label="Party" type="text" value={item.party} readOnly />
                     )}
                     <div>
-                      <Input label={`Pengambilan (ZAK)${item.maxZAK > 0 ? ` - Max: ${item.maxZAK}` : ""}`} type="number" value={item.pengambilanZAK} onChange={(e) => handleItemChange(item.id, "pengambilanZAK", e.target.value)} placeholder={item.maxZAK > 0 ? `Max ${item.maxZAK} ZAK` : "Contoh: 100"} />
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Pengambilan (ZAK){item.maxZAK > 0 ? ` - Max: ${item.maxZAK}` : ""}
+                      </label>
+                      <input
+                        type="number"
+                        value={item.pengambilanZAK}
+                        onChange={(e) => handleItemChange(item.id, "pengambilanZAK", e.target.value)}
+                        placeholder={item.maxZAK > 0 ? `Max ${item.maxZAK} ZAK` : "Contoh: 100"}
+                        onWheel={(e) => { e.currentTarget.blur(); }}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all bg-white"
+                      />
                       {item.bobotPerUnit > 0 && item.pengambilanZAK && (
                         <p className="mt-1 text-xs text-gray-500">
                           = {(parseFloat(item.pengambilanZAK || "0") * item.bobotPerUnit).toLocaleString()} KG (bobot: {item.bobotPerUnit} KG/ZAK)
