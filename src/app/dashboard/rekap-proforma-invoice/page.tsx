@@ -253,8 +253,7 @@ export default function RekapProformaInvoicePage() {
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceSurat, setInvoiceSurat] = useState<SuratMuatInfo | null>(null);
   const [selectedOrderTTD, setSelectedOrderTTD] = useState("");
-  const [selectedHormatTTD, setSelectedHormatTTD] = useState("");
-  const [invoiceNomor, setInvoiceNomor] = useState("");
+    const [invoiceNomor, setInvoiceNomor] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -658,7 +657,6 @@ export default function RekapProformaInvoicePage() {
     setSelectedItem(row);
     setInvoiceSurat(null);
     setSelectedOrderTTD("");
-    setSelectedHormatTTD("");
     setInvoiceNomor("");
     setInvoiceDate("");
     setIsInvoiceModalOpen(true);
@@ -683,7 +681,6 @@ export default function RekapProformaInvoicePage() {
   const handleOpenInvoice = async (surat: SuratMuatInfo) => {
     setInvoiceSurat(surat);
     setSelectedOrderTTD("");
-    setSelectedHormatTTD("");
     setInvoiceNomor("");
     setInvoiceDate(surat.tanggal);
     setIsInvoiceModalOpen(true);
@@ -760,13 +757,12 @@ export default function RekapProformaInvoicePage() {
   };
 
   const handleTerbitkanInvoice = async () => {
-    if (!selectedItem || !invoiceNomor || !selectedOrderTTD || !selectedHormatTTD) {
-      alert("Pilih TTD untuk Diorder Oleh dan Hormat Kami terlebih dahulu.");
+    if (!selectedItem || !invoiceNomor || !selectedOrderTTD) {
+      alert("Pilih TTD untuk Diorder Oleh terlebih dahulu.");
       return;
     }
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
-    const hormatTTD = ttdList.find((t) => t.id === selectedHormatTTD);
-    if (!orderTTD || !hormatTTD) return;
+    if (!orderTTD) return;
     setIsSubmitting(true);
     try {
       const pi = selectedItem;
@@ -826,10 +822,9 @@ export default function RekapProformaInvoicePage() {
         ttdOrderNama: orderTTD.nama,
         ttdOrderJabatan: orderTTD.jabatan,
         ttdOrderImage: orderTTD.ttdImage,
-        ttdHormatId: selectedHormatTTD,
-        ttdHormatNama: hormatTTD.nama,
-        ttdHormatJabatan: hormatTTD.jabatan,
-        ttdHormatImage: hormatTTD.ttdImage,
+        ttdHormatNama: "Sri Setyo Wibowo",
+        ttdHormatJabatan: "Manager Keuangan",
+        ttdHormatImage: "/Picture4.png",
         createdAt: serverTimestamp(),
       });
       setIsInvoiceModalOpen(false);
@@ -838,13 +833,12 @@ export default function RekapProformaInvoicePage() {
   };
 
   const handleTerbitkanInvoiceSementara = async () => {
-    if (!selectedItem || !invoiceSurat || !invoiceNomor || !selectedOrderTTD || !selectedHormatTTD) {
-      alert("Pilih TTD untuk Diorder Oleh dan Hormat Kami terlebih dahulu.");
+    if (!selectedItem || !invoiceSurat || !invoiceNomor || !selectedOrderTTD) {
+      alert("Pilih TTD untuk Diorder Oleh terlebih dahulu.");
       return;
     }
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
-    const hormatTTD = ttdList.find((t) => t.id === selectedHormatTTD);
-    if (!orderTTD || !hormatTTD) return;
+    if (!orderTTD) return;
     setIsSubmitting(true);
     try {
       const pi = selectedItem;
@@ -903,10 +897,9 @@ export default function RekapProformaInvoicePage() {
         ttdOrderNama: orderTTD.nama,
         ttdOrderJabatan: orderTTD.jabatan,
         ttdOrderImage: orderTTD.ttdImage,
-        ttdHormatId: selectedHormatTTD,
-        ttdHormatNama: hormatTTD.nama,
-        ttdHormatJabatan: hormatTTD.jabatan,
-        ttdHormatImage: hormatTTD.ttdImage,
+        ttdHormatNama: "Sri Setyo Wibowo",
+        ttdHormatJabatan: "Manager Keuangan",
+        ttdHormatImage: "/Picture4.png",
         createdAt: serverTimestamp(),
       });
       setIsInvoiceModalOpen(false);
@@ -1913,7 +1906,6 @@ export default function RekapProformaInvoicePage() {
     if (!selectedItem || !invoiceNomor) return;
     const pi = selectedItem;
     const orderTTD = ttdList.find((t) => t.id === selectedOrderTTD);
-    const hormatTTD = ttdList.find((t) => t.id === selectedHormatTTD);
     const allSuratForPI = getSuratMuatForPI(pi.nomorPI);
     const tanggalInvoice = invoiceDate || pi.tanggal;
     const invoiceItems = pi.produkItems
@@ -2122,9 +2114,9 @@ export default function RekapProformaInvoicePage() {
             </div>
             <div class="right-signature">
               <p style="margin-bottom: 30px;">Hormat kami,<br>PT. Bukit Agrochemical Baru</p>
-              ${hormatTTD ? `<img src="${hormatTTD.ttdImage}" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" />` : `<img src="/Picture4.png" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display=\'none\'" />`}
-              <p style="font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">${hormatTTD ? hormatTTD.nama : "Sri Setyo Wibowo"}</p>
-              <p>${hormatTTD ? hormatTTD.jabatan : "Manager Keuangan"}</p>
+              <img src="/Picture4.png" alt="TTD" style="height: 50px; object-fit: contain; margin: 0 auto; display: block;" onerror="this.style.display='none'" />
+              <p style="font-weight: 700; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px; display: inline-block;">Sri Setyo Wibowo</p>
+              <p>Manager Keuangan</p>
             </div>
           </div>
           <img src="/Picture1.png" alt="Footer" class="footer-img" onerror="this.style.display=\'none\'" />
@@ -2798,11 +2790,11 @@ export default function RekapProformaInvoicePage() {
           )}
           <Button variant="outline" onClick={() => setIsInvoiceModalOpen(false)}>Batal</Button>
           {invoiceSurat ? (
-            <Button variant="primary" onClick={handleTerbitkanInvoiceSementara} disabled={!selectedOrderTTD || !selectedHormatTTD || !invoiceNomor || isGeneratingInvoice || isSubmitting} isLoading={isSubmitting}>Terbitkan</Button>
+            <Button variant="primary" onClick={handleTerbitkanInvoiceSementara} disabled={!selectedOrderTTD || !invoiceNomor || isGeneratingInvoice || isSubmitting} isLoading={isSubmitting}>Terbitkan</Button>
           ) : (
-            <Button variant="primary" onClick={handleTerbitkanInvoice} disabled={!selectedOrderTTD || !selectedHormatTTD || !invoiceNomor || isGeneratingInvoice || isSubmitting} isLoading={isSubmitting}>Terbitkan</Button>
+            <Button variant="primary" onClick={handleTerbitkanInvoice} disabled={!selectedOrderTTD || !invoiceNomor || isGeneratingInvoice || isSubmitting} isLoading={isSubmitting}>Terbitkan</Button>
           )}
-          <Button variant="primary" onClick={handlePrintInvoice} disabled={!selectedOrderTTD || !selectedHormatTTD || !invoiceNomor || isGeneratingInvoice}>Print</Button>
+          <Button variant="primary" onClick={handlePrintInvoice} disabled={!selectedOrderTTD || !invoiceNomor || isGeneratingInvoice}>Print</Button>
         </div>
       }>
         <div className="space-y-4">
@@ -2838,25 +2830,7 @@ export default function RekapProformaInvoicePage() {
               })()}
             </div>
           )}
-          <p className="text-sm text-gray-600">Pilih TTD untuk bagian <strong>Hormat Kami</strong>:</p>
-          <Select label="Pilih TTD Hormat Kami" value={selectedHormatTTD} onChange={(e) => setSelectedHormatTTD(e.target.value)} options={[{ value: "", label: "Pilih tanda tangan..." }, ...ttdList.map((ttd) => ({ value: ttd.id, label: `${ttd.nama} - ${ttd.jabatan}` }))]} />
-          {selectedHormatTTD && (
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center gap-4">
-              {(() => {
-                const ttd = ttdList.find((t) => t.id === selectedHormatTTD);
-                if (!ttd) return null;
-                return (
-                  <>
-                    <img src={ttd.ttdImage} alt="TTD" className="h-16 object-contain bg-white rounded-lg border border-gray-200" />
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{ttd.nama}</p>
-                      <p className="text-xs text-gray-500">{ttd.jabatan}</p>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          )}
+
         </div>
       </Modal>
       <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="Tambah Pembayaran" size="md" footer={
