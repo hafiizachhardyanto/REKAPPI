@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import {
-  collection, getDocs, query, orderBy, doc, getDoc, where, deleteDoc,
-} from "firebase/firestore";
+import { collection, getDocs, query, orderBy, doc, deleteDoc } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import Header from "@/app/components/ui/Header";
 import Table from "@/app/components/ui/Table";
@@ -107,6 +105,17 @@ const numberToWords = (num: number): string => {
   return result.trim() + " RUPIAH";
 };
 
+const sendWhatsAppNotification = async (phone: string, apiKey: string, message: string) => {
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(message)}&apikey=${encodeURIComponent(apiKey)}`;
+  try {
+    const res = await fetch(url, { method: "GET" });
+    const text = await res.text();
+    return res.ok && text.toLowerCase().includes("success");
+  } catch {
+    return false;
+  }
+};
+
 export default function ArsipInvoicePage() {
   const [data, setData] = useState<ArsipInvoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -116,8 +125,18 @@ export default function ArsipInvoicePage() {
   const [deleteItem, setDeleteItem] = useState<ArsipInvoice | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [waPhone, setWaPhone] = useState("");
+  const [waApiKey, setWaApiKey] = useState("");
+  const [isWaModalOpen, setIsWaModalOpen] = useState(false);
+  const [waItem, setWaItem] = useState<ArsipInvoice | null>(null);
+  const [isSendingWa, setIsSendingWa] = useState(false);
+  const [waStatus, setWaStatus] = useState("");
 
   useEffect(() => {
+    const savedPhone = localStorage.getItem("wa_phone") || "";
+    const savedKey = localStorage.getItem("wa_apikey") || "";
+    setWaPhone(savedPhone);
+    setWaApiKey(savedKey);
     fetchData();
   }, []);
 
@@ -186,6 +205,27 @@ export default function ArsipInvoicePage() {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleWaClick = (item: ArsipInvoice) => {
+    setWaItem(item);
+    setWaStatus("");
+    setIsWaModalOpen(true);
+  };
+
+  const handleSendWa = async () => {
+    if (!waItem || !waPhone || !waApiKey) {
+      setWaStatus("Lengkapi nomor tujuan dan API Key");
+      return;
+    }
+    setIsSendingWa(true);
+    setWaStatus("Mengirim...");
+    localStorage.setItem("wa_phone", waPhone);
+    localStorage.setItem("wa_apikey", waApiKey);
+    const message = `${waItem.nomorPI} Invoice telah terbit\nNomor Invoice: ${waItem.nomorInvoice}\nCustomer: ${waItem.namaCustomer}\nJumlah: ${formatRupiah(waItem.jumlahTertagih)}`;
+    const ok = await sendWhatsAppNotification(waPhone, waApiKey, message);
+    setWaStatus(ok ? "Berhasil terkirim!" : "Gagal mengirim. Periksa API Key.");
+    setIsSendingWa(false);
   };
 
   const handlePrintInvoice = (item: ArsipInvoice) => {
@@ -421,9 +461,12 @@ export default function ArsipInvoicePage() {
     {
       key: "aksi",
       header: "Aksi",
-      width: "200px",
+      width: "240px",
       render: (row: ArsipInvoice) => (
         <div className="flex items-center gap-2">
+          <button onClick={(e) => { e.stopPropagation(); handleWaClick(row); }} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Kirim WA">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+          </button>
           <button onClick={(e) => { e.stopPropagation(); handleDetail(row); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Detail">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
           </button>
@@ -576,6 +619,34 @@ export default function ArsipInvoicePage() {
           <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Batal</Button>
           <Button variant="danger" onClick={handleConfirmDelete} disabled={isDeleting}>
             {isDeleting ? "Menghapus..." : "Hapus"}
+          </Button>
+        </div>
+      </Modal>
+      <Modal isOpen={isWaModalOpen} onClose={() => setIsWaModalOpen(false)} title="Kirim Notifikasi WhatsApp" size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nomor Tujuan (628xx)</label>
+            <input type="text" value={waPhone} onChange={(e) => setWaPhone(e.target.value)} placeholder="6281234567890" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">CallMeBot API Key</label>
+            <input type="text" value={waApiKey} onChange={(e) => setWaApiKey(e.target.value)} placeholder="API Key dari CallMeBot" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <p className="text-xs text-gray-500 mt-1">Save nomor +34 644 52 53 53, kirim "I allow callmebot to send me messages" untuk mendapat API Key.</p>
+          </div>
+          {waItem && (
+            <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-700">
+              <p className="font-semibold">Preview Pesan:</p>
+              <p className="mt-1">{waItem.nomorPI} Invoice telah terbit</p>
+            </div>
+          )}
+          {waStatus && (
+            <p className={`text-sm font-medium ${waStatus.includes("Berhasil") ? "text-green-600" : "text-red-600"}`}>{waStatus}</p>
+          )}
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <Button variant="outline" onClick={() => setIsWaModalOpen(false)}>Batal</Button>
+          <Button variant="primary" onClick={handleSendWa} disabled={isSendingWa}>
+            {isSendingWa ? "Mengirim..." : "Kirim WA"}
           </Button>
         </div>
       </Modal>
