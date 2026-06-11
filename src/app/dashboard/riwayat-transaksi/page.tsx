@@ -23,6 +23,7 @@ interface UnifiedTransaksi {
   namaBarang: string;
   unit: string;
   jumlahZAK: number;
+  totalKG?: number;
   fot: string;
   createdBy: string;
   createdAt?: Date;
@@ -52,12 +53,15 @@ interface UnifiedTransaksi {
 
 interface StockItem {
   id: string;
+  kodeBarang: string;
   namaBarang: string;
   bobotPerUnit: number;
   stokAkhirUnit: number;
   stokAkhirKG: number;
   barangKeluarUnit: number;
   barangKeluarKG: number;
+  barangMasukUnit: number;
+  barangMasukKG: number;
 }
 
 interface ProformaInvoiceItem {
@@ -167,6 +171,7 @@ export default function RiwayatTransaksiPage() {
         namaBarang: doc.data().namaBarang,
         unit: doc.data().unit,
         jumlahZAK: doc.data().jumlahZAK,
+        totalKG: doc.data().totalKG || 0,
         fot: doc.data().fot,
         createdBy: doc.data().createdBy,
         createdAt: doc.data().createdAt?.toDate(),
@@ -227,12 +232,15 @@ export default function RiwayatTransaksiPage() {
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((doc) => ({
         id: doc.id,
+        kodeBarang: doc.data().kodeBarang || "",
         namaBarang: doc.data().namaBarang || "",
         bobotPerUnit: doc.data().bobotPerUnit || 50,
         stokAkhirUnit: doc.data().stokAkhirUnit || 0,
         stokAkhirKG: doc.data().stokAkhirKG || 0,
         barangKeluarUnit: doc.data().barangKeluarUnit || 0,
         barangKeluarKG: doc.data().barangKeluarKG || 0,
+        barangMasukUnit: doc.data().barangMasukUnit || 0,
+        barangMasukKG: doc.data().barangMasukKG || 0,
       } as StockItem));
       setStockList(data);
     } catch (error) { console.error(error); }
@@ -287,6 +295,13 @@ export default function RiwayatTransaksiPage() {
     return stockList.find((s) =>
       s.namaBarang.toUpperCase().includes(namaProduk.toUpperCase()) ||
       namaProduk.toUpperCase().includes(s.namaBarang.toUpperCase())
+    );
+  };
+
+  const getStockExactMatch = (kodeBarang: string, namaBarang: string) => {
+    return stockList.find((s) =>
+      s.kodeBarang.toUpperCase() === kodeBarang.toUpperCase() &&
+      s.namaBarang.toUpperCase() === namaBarang.toUpperCase()
     );
   };
 
@@ -383,6 +398,7 @@ export default function RiwayatTransaksiPage() {
       }
       setIsEditModalOpen(false);
       fetchData();
+      fetchStockGudang();
     } catch (error) { console.error(error); } finally { setIsSubmitting(false); }
   };
 
@@ -408,6 +424,19 @@ export default function RiwayatTransaksiPage() {
     }
     if (selectedItem!.jenis === "barangMasuk") {
       updateData.sopirNopol = editForm.sopirNopol.trim();
+      let totalKG = 0;
+      if (editForm.unit === "KG") {
+        totalKG = jumlahZAK;
+      } else if (editForm.unit === "BOTOL") {
+        const bpd = botolPerDus || 20;
+        const dusPerZak = 10;
+        const totalBotol = jumlahZAK * dusPerZak * bpd;
+        totalKG = (totalBotol * (bobotPerBotol || 50)) / 1000;
+      } else {
+        const stock = getStockExactMatch(editForm.kodeBarang, editForm.namaBarang);
+        totalKG = jumlahZAK * (stock?.bobotPerUnit || 50);
+      }
+      updateData.totalKG = totalKG;
     } else if (selectedItem!.jenis === "barangKeluar") {
       updateData.namaCustomer = editForm.namaCustomer.trim();
       updateData.nomorPI = editForm.nomorPI.trim();
@@ -415,6 +444,48 @@ export default function RiwayatTransaksiPage() {
       updateData.nomorSuratPengangkutan = editForm.nomorSuratPengangkutan.trim();
     }
     await updateDoc(doc(db, collectionName, selectedItem!.id), updateData);
+
+    if (selectedItem!.jenis === "barangMasuk") {
+      const stock = getStockExactMatch(selectedItem!.kodeBarang, selectedItem!.namaBarang);
+      if (stock) {
+        const stockRef = doc(db, "stockGudang", stock.id);
+        const stockSnap = await getDoc(stockRef);
+        if (stockSnap.exists()) {
+          const sData = stockSnap.data();
+          const currentMasukUnit = sData.barangMasukUnit || 0;
+          const currentMasukKG = sData.barangMasukKG || 0;
+          const currentStokUnit = sData.stokAkhirUnit || 0;
+          const currentStokKG = sData.stokAkhirKG || 0;
+
+          const oldUnit = selectedItem!.unit === "KG" ? 0 : selectedItem!.jumlahZAK;
+          const oldKG = selectedItem!.totalKG || (selectedItem!.unit === "KG" ? selectedItem!.jumlahZAK : selectedItem!.jumlahZAK * (stock.bobotPerUnit || 50));
+
+          const newUnit = editForm.unit === "KG" ? 0 : jumlahZAK;
+          let newKG = 0;
+          if (editForm.unit === "KG") {
+            newKG = jumlahZAK;
+          } else if (editForm.unit === "BOTOL") {
+            const bpd = botolPerDus || 20;
+            const dusPerZak = 10;
+            const totalBotol = jumlahZAK * dusPerZak * bpd;
+            newKG = (totalBotol * (bobotPerBotol || 50)) / 1000;
+          } else {
+            newKG = jumlahZAK * (stock.bobotPerUnit || 50);
+          }
+
+          const deltaUnit = newUnit - oldUnit;
+          const deltaKG = newKG - oldKG;
+
+          await updateDoc(stockRef, {
+            barangMasukUnit: Math.max(0, currentMasukUnit + deltaUnit),
+            barangMasukKG: Math.max(0, currentMasukKG + deltaKG),
+            stokAkhirUnit: Math.max(0, currentStokUnit + deltaUnit),
+            stokAkhirKG: Math.max(0, currentStokKG + deltaKG),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+    }
   };
 
   const handleUpdateSuratPengangkutan = async () => {
@@ -527,6 +598,30 @@ export default function RiwayatTransaksiPage() {
       item.jenis === "suratPengangkutanDO" ? "Surat Pengangkutan DO" : "Barang Keluar";
     if (!confirm(`Apakah Anda yakin ingin menghapus data ${jenisLabel} ini?`)) return;
     try {
+      if (item.jenis === "barangMasuk") {
+        const stock = getStockExactMatch(item.kodeBarang, item.namaBarang);
+        if (stock) {
+          const stockRef = doc(db, "stockGudang", stock.id);
+          const stockSnap = await getDoc(stockRef);
+          if (stockSnap.exists()) {
+            const sData = stockSnap.data();
+            const currentMasukUnit = sData.barangMasukUnit || 0;
+            const currentMasukKG = sData.barangMasukKG || 0;
+            const currentStokUnit = sData.stokAkhirUnit || 0;
+            const currentStokKG = sData.stokAkhirKG || 0;
+            const minusUnit = item.unit === "KG" ? 0 : item.jumlahZAK;
+            const minusKG = item.totalKG || (item.unit === "KG" ? item.jumlahZAK : item.jumlahZAK * (stock.bobotPerUnit || 50));
+            await updateDoc(stockRef, {
+              barangMasukUnit: Math.max(0, currentMasukUnit - minusUnit),
+              barangMasukKG: Math.max(0, currentMasukKG - minusKG),
+              stokAkhirUnit: Math.max(0, currentStokUnit - minusUnit),
+              stokAkhirKG: Math.max(0, currentStokKG - minusKG),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+      }
+
       if (item.jenis === "suratPengangkutanGudangInduk" && item.nomorPI) {
         const pi = getPIByNomor(item.nomorPI);
         if (pi) {
@@ -588,6 +683,7 @@ export default function RiwayatTransaksiPage() {
       }
       await deleteDoc(doc(db, collectionName, item.id));
       fetchData();
+      fetchStockGudang();
       fetchExistingSurat();
     } catch (error) { console.error(error); }
   };
