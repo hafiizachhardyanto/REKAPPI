@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -52,6 +52,7 @@ export default function TransaksiBarangMasukPage() {
   const [sopirNopolList, setSopirNopolList] = useState<SopirNopolItem[]>([
     { id: 1, namaSopir: "", nopol: "", nomorSIM: "" },
   ]);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [matchedStock, setMatchedStock] = useState<StockItem | null>(null);
   const [showNewStockModal, setShowNewStockModal] = useState(false);
@@ -71,6 +72,23 @@ export default function TransaksiBarangMasukPage() {
 
   useEffect(() => {
     fetchStockGudang();
+  }, []);
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const numberInputs = form.querySelectorAll('input[type="number"]');
+    const handler = (e: Event) => {
+      (e.target as HTMLInputElement).blur();
+    };
+    numberInputs.forEach((input) => {
+      input.addEventListener("wheel", handler, { passive: true });
+    });
+    return () => {
+      numberInputs.forEach((input) => {
+        input.removeEventListener("wheel", handler);
+      });
+    };
   }, []);
 
   const fetchStockGudang = async () => {
@@ -443,7 +461,7 @@ export default function TransaksiBarangMasukPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         <Card title="Informasi Transaksi">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Input
