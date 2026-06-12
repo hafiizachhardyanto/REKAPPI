@@ -766,8 +766,8 @@ export default function DashboardPage() {
               {stats.recentPI.map((pi) => (
                 <div
                   key={pi.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-green-50 transition-colors cursor-pointer"
-                  onClick={() => router.push("/dashboard/rekap-proforma-invoice")}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+
                 >
                   <div>
                     <p className="font-semibold text-gray-800">{pi.nomorPI}</p>
