@@ -436,30 +436,15 @@ export default function SuratPengangkutanPage() {
     const year = now.getFullYear();
     const roman = getRomanMonth(now.getMonth() + 1);
     const prefix = `BAGB-SP/${year}/${roman}`;
-    const q = query(
-      collection(db, "suratPengangkutan"),
-      where("nomorSeri", ">=", prefix),
-      where("nomorSeri", "<=", prefix + "\uf8ff")
-    );
-    const snapshot = await getDocs(q);
-    const numbers: number[] = [];
-    snapshot.docs.forEach((doc) => {
-      const nomorSeri = doc.data().nomorSeri || "";
-      const parsed = parseNomorSeriGI(nomorSeri);
-      if (parsed && parsed.year === year && parsed.roman === roman) {
-        numbers.push(parsed.urut);
-      }
+    const counterRef = doc(db, "counters", `suratPengangkutanGI_${year}_${roman}`);
+    await setDoc(counterRef, { count: 0, updatedAt: Timestamp.now() }, { merge: true });
+    return await runTransaction(db, async (transaction) => {
+      const counterSnap = await transaction.get(counterRef);
+      const currentCount = counterSnap.data()?.count || 0;
+      const nextCount = currentCount + 1;
+      transaction.update(counterRef, { count: nextCount, updatedAt: Timestamp.now() });
+      return `${prefix}/${String(nextCount).padStart(4, "0")}`;
     });
-    numbers.sort((a, b) => a - b);
-    let nextUrut = 1;
-    for (const num of numbers) {
-      if (num === nextUrut) {
-        nextUrut++;
-      } else if (num > nextUrut) {
-        break;
-      }
-    }
-    return `${prefix}/${String(nextUrut).padStart(4, "0")}`;
   };
 
   const generateNomorSeriDO = async () => {

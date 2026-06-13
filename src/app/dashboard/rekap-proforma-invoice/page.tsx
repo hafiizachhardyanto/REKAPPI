@@ -632,28 +632,43 @@ export default function RekapProformaInvoicePage() {
   };
 
   const getUniqueInvoiceBaseNumber = async (): Promise<string> => {
-    const counterRef = doc(db, "counters", "invoiceBase");
+    const poolRef = doc(db, "counters", "invoiceBasePool");
     const maxRetries = 10;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const result = await runTransaction(db, async (transaction) => {
-          const counterDoc = await transaction.get(counterRef);
-          let lastNum = 0;
-          if (counterDoc.exists()) {
-            lastNum = counterDoc.data().lastNumber || 0;
+          const poolSnap = await transaction.get(poolRef);
+          let lastNumber = 0;
+          let gaps: number[] = [];
+          if (poolSnap.exists()) {
+            lastNumber = poolSnap.data().lastNumber || 0;
+            gaps = poolSnap.data().gaps || [];
           }
-          let candidateNum = lastNum + 1;
+          let candidateNum: number;
+          if (gaps.length > 0) {
+            gaps.sort((a, b) => a - b);
+            candidateNum = gaps[0];
+            gaps = gaps.filter((g) => g !== candidateNum);
+          } else {
+            candidateNum = lastNumber + 1;
+            lastNumber = candidateNum;
+          }
           const candidateBase = String(candidateNum).padStart(4, "0");
           const lockRef = doc(db, "invoiceBaseLocks", candidateBase);
           const lockDoc = await transaction.get(lockRef);
           if (lockDoc.exists()) {
-            let searchNum = candidateNum + 1;
+            let searchNum = 1;
             let found = false;
-            while (searchNum <= candidateNum + 1000 && !found) {
+            while (searchNum <= lastNumber + 1000 && !found) {
               const testBase = String(searchNum).padStart(4, "0");
               const testRef = doc(db, "invoiceBaseLocks", testBase);
               const testDoc = await transaction.get(testRef);
               if (!testDoc.exists()) {
+                if (gaps.includes(searchNum)) {
+                  gaps = gaps.filter((g) => g !== searchNum);
+                } else if (searchNum > lastNumber) {
+                  lastNumber = searchNum;
+                }
                 candidateNum = searchNum;
                 found = true;
               }
@@ -664,7 +679,7 @@ export default function RekapProformaInvoicePage() {
             }
           }
           transaction.set(lockRef, { createdAt: serverTimestamp(), used: true });
-          transaction.set(counterRef, { lastNumber: candidateNum });
+          transaction.set(poolRef, { lastNumber, gaps, updatedAt: Timestamp.now() });
           return String(candidateNum).padStart(4, "0");
         });
         return result;
@@ -782,6 +797,17 @@ export default function RekapProformaInvoicePage() {
       const piRow = data.find((d) => d.nomorPI === nomorPI);
       if (piRow) {
         if (piRow.invoiceBaseNumber) {
+          const baseNum = parseInt(piRow.invoiceBaseNumber);
+          const poolRef = doc(db, "counters", "invoiceBasePool");
+          await runTransaction(db, async (transaction) => {
+            const poolSnap = await transaction.get(poolRef);
+            let gaps = (poolSnap.data()?.gaps || []) as number[];
+            if (!gaps.includes(baseNum)) {
+              gaps.push(baseNum);
+              gaps.sort((a, b) => a - b);
+            }
+            transaction.set(poolRef, { gaps, updatedAt: Timestamp.now() }, { merge: true });
+          });
           try { await deleteDoc(doc(db, "invoiceBaseLocks", piRow.invoiceBaseNumber)); } catch {}
         }
         await updateDoc(doc(db, "proformaInvoice", piRow.id), {
@@ -812,6 +838,17 @@ export default function RekapProformaInvoicePage() {
       const piRef = doc(db, "proformaInvoice", selectedItem.id);
       const oldBase = selectedItem.invoiceBaseNumber;
       if (oldBase) {
+        const baseNum = parseInt(oldBase);
+        const poolRef = doc(db, "counters", "invoiceBasePool");
+        await runTransaction(db, async (transaction) => {
+          const poolSnap = await transaction.get(poolRef);
+          let gaps = (poolSnap.data()?.gaps || []) as number[];
+          if (!gaps.includes(baseNum)) {
+            gaps.push(baseNum);
+            gaps.sort((a, b) => a - b);
+          }
+          transaction.set(poolRef, { gaps, updatedAt: Timestamp.now() }, { merge: true });
+        });
         try { await deleteDoc(doc(db, "invoiceBaseLocks", oldBase)); } catch {}
       }
       await updateDoc(piRef, { invoiceBaseNumber: null, updatedAt: serverTimestamp() });
