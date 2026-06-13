@@ -63,6 +63,8 @@ export default function RiwayatCustomerPage() {
   const [editCustomerAddress, setEditCustomerAddress] = useState("");
   const [editCustomerNpwp, setEditCustomerNpwp] = useState("");
   const [editCustomerId, setEditCustomerId] = useState("");
+  const [editCustomerIdError, setEditCustomerIdError] = useState("");
+  const [addCustomerIdError, setAddCustomerIdError] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -189,10 +191,24 @@ export default function RiwayatCustomerPage() {
     }
   };
 
+  const checkDuplicateCustomerId = (id: string, excludeId?: string): boolean => {
+    return customerList.some((c) => c.id !== excludeId && c.customerId.trim().toLowerCase() === id.trim().toLowerCase());
+  };
+
   const handleAddCustomer = async () => {
     if (!newCustomerName.trim() || !newCustomerAddress.trim()) return;
     try {
-      const customerId = await generateCustomerId();
+      let customerId = await generateCustomerId();
+      let attempts = 0;
+      while (checkDuplicateCustomerId(customerId) && attempts < 5) {
+        customerId = await generateCustomerId();
+        attempts++;
+      }
+      if (checkDuplicateCustomerId(customerId)) {
+        setAddCustomerIdError("Gagal generate Customer ID unik, silakan coba lagi");
+        return;
+      }
+      setAddCustomerIdError("");
       await addDoc(collection(db, "customers"), {
         customerId,
         namaCustomer: newCustomerName.trim(),
@@ -217,11 +233,17 @@ export default function RiwayatCustomerPage() {
     setEditCustomerAddress(customer.alamatCustomer);
     setEditCustomerNpwp(customer.npwp || "");
     setEditCustomerId(customer.customerId || "");
+    setEditCustomerIdError("");
     setIsEditModalOpen(true);
   };
 
   const handleSaveEdit = async () => {
     if (!editingCustomer || !editCustomerName.trim() || !editCustomerAddress.trim()) return;
+    if (checkDuplicateCustomerId(editCustomerId, editingCustomer.id)) {
+      setEditCustomerIdError("Customer ID sudah digunakan oleh customer lain");
+      return;
+    }
+    setEditCustomerIdError("");
     try {
       await updateDoc(doc(db, "customers", editingCustomer.id), {
         namaCustomer: editCustomerName.trim(),
@@ -413,8 +435,13 @@ export default function RiwayatCustomerPage() {
         )}
       </Card>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setNewCustomerName(""); setNewCustomerAddress(""); setNewCustomerNpwp(""); }} title="Tambah Customer Baru" size="md" footer={<div className="flex justify-end gap-3"><Button variant="outline" onClick={() => { setIsAddModalOpen(false); setNewCustomerName(""); setNewCustomerAddress(""); setNewCustomerNpwp(""); }}>Batal</Button><Button variant="primary" onClick={handleAddCustomer} disabled={!newCustomerName.trim() || !newCustomerAddress.trim()}>Simpan</Button></div>}>
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setNewCustomerName(""); setNewCustomerAddress(""); setNewCustomerNpwp(""); setAddCustomerIdError(""); }} title="Tambah Customer Baru" size="md" footer={<div className="flex justify-end gap-3"><Button variant="outline" onClick={() => { setIsAddModalOpen(false); setNewCustomerName(""); setNewCustomerAddress(""); setNewCustomerNpwp(""); setAddCustomerIdError(""); }}>Batal</Button><Button variant="primary" onClick={handleAddCustomer} disabled={!newCustomerName.trim() || !newCustomerAddress.trim()}>Simpan</Button></div>}>
         <div className="space-y-4">
+          {addCustomerIdError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {addCustomerIdError}
+            </div>
+          )}
           <Input label="Nama Customer" type="text" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Masukkan nama customer" required />
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Alamat Customer <span className="text-red-500">*</span></label>
@@ -424,9 +451,9 @@ export default function RiwayatCustomerPage() {
         </div>
       </Modal>
 
-      <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); setEditingCustomer(null); }} title="Edit Customer" size="md" footer={<div className="flex justify-end gap-3"><Button variant="outline" onClick={() => { setIsEditModalOpen(false); setEditingCustomer(null); }}>Batal</Button><Button variant="primary" onClick={handleSaveEdit} disabled={!editCustomerName.trim() || !editCustomerAddress.trim()}>Simpan Perubahan</Button></div>}>
+      <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); setEditingCustomer(null); setEditCustomerIdError(""); }} title="Edit Customer" size="md" footer={<div className="flex justify-end gap-3"><Button variant="outline" onClick={() => { setIsEditModalOpen(false); setEditingCustomer(null); setEditCustomerIdError(""); }}>Batal</Button><Button variant="primary" onClick={handleSaveEdit} disabled={!editCustomerName.trim() || !editCustomerAddress.trim()}>Simpan Perubahan</Button></div>}>
         <div className="space-y-4">
-          <Input label="Customer ID" type="text" value={editCustomerId} onChange={(e) => setEditCustomerId(e.target.value)} placeholder="Contoh: BAGB-CS-001" />
+          <Input label="Customer ID" type="text" value={editCustomerId} onChange={(e) => { setEditCustomerId(e.target.value); setEditCustomerIdError(""); }} placeholder="Contoh: BAGB-CS-001" error={editCustomerIdError} />
           <Input label="Nama Customer" type="text" value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} placeholder="Masukkan nama customer" required />
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Alamat Customer <span className="text-red-500">*</span></label>

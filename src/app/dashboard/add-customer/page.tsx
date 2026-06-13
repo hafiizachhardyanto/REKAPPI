@@ -76,6 +76,10 @@ export default function AddCustomerPage() {
     return customerList.some((c) => c.namaCustomer.trim().toLowerCase() === normalized);
   };
 
+  const checkDuplicateCustomerId = (id: string): boolean => {
+    return customerList.some((c) => c.customerId.trim().toLowerCase() === id.trim().toLowerCase());
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
@@ -88,7 +92,17 @@ export default function AddCustomerPage() {
 
     setIsSubmitting(true);
     try {
-      const customerId = await generateCustomerId();
+      let customerId = await generateCustomerId();
+      let attempts = 0;
+      while (checkDuplicateCustomerId(customerId) && attempts < 5) {
+        customerId = await generateCustomerId();
+        attempts++;
+      }
+      if (checkDuplicateCustomerId(customerId)) {
+        setErrors({ submit: "Gagal generate Customer ID unik, silakan coba lagi" });
+        setIsSubmitting(false);
+        return;
+      }
       await addDoc(collection(db, "customers"), {
         customerId,
         namaCustomer: namaCustomer.trim(),
