@@ -170,13 +170,13 @@ const parseNomorSeri = (nomorSeri: string) => {
 };
 
 const validateNomorSeriFormat = (value: string) => {
-  const giRegex = new RegExp("^BAGB-SP/\d{4}/(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)/\d{4}$");
-  const doRegex = new RegExp("^BAGB-SP-DO.+-\d{4}$");
+  const giRegex = new RegExp("^BAGB-SP/\\d{4}/(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)/\\d{4}$");
+  const doRegex = new RegExp("^BAGB-SP-DO.+-\\d{4}$");
   return giRegex.test(value.trim()) || doRegex.test(value.trim());
 };
 
 const parseInvoiceNumber = (nomor: string) => {
-  const match = nomor.match(new RegExp("^BAGB-INV(?:-S(\d+))?-(\d{4})$"));
+  const match = nomor.match(new RegExp("^BAGB-INV(?:-S(\\d+))?-(\\d{4})$"));
   if (!match) return null;
   return {
     isPartial: !!match[1],
@@ -244,6 +244,8 @@ export default function RekapProformaInvoicePage() {
   const [filterTanggal, setFilterTanggal] = useState("");
   const [filterBulan, setFilterBulan] = useState("");
   const [filterTahun, setFilterTahun] = useState("");
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState<ProformaInvoice | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -311,6 +313,10 @@ export default function RekapProformaInvoicePage() {
       setInvoiceExists(false);
     }
   }, [selectedItem]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterTanggal, filterBulan, filterTahun, itemsPerPage]);
 
   const fetchData = async () => {
     try {
@@ -651,7 +657,7 @@ export default function RekapProformaInvoicePage() {
       snap.docs.forEach((d) => {
         const ni = d.data().nomorInvoice;
         if (ni && ni.includes("-S") && ni.endsWith(`-${baseNumber}`)) {
-          const match = ni.match(new RegExp("-S(\d+)-"));
+          const match = ni.match(new RegExp("-S(\\d+)-"));
           if (match) usedPartials.add(parseInt(match[1]));
         }
       });
@@ -952,6 +958,10 @@ export default function RekapProformaInvoicePage() {
     const matchTahun = filterTahun ? date.getFullYear().toString() === filterTahun : true;
     return matchSearch && matchTanggal && matchBulan && matchTahun;
   });
+
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedData = filteredData.slice(startIndex, startIndex + itemsPerPage);
 
   const handleDetail = (item: ProformaInvoice) => {
     setSelectedItem(item);
@@ -2045,6 +2055,15 @@ export default function RekapProformaInvoicePage() {
     }),
   ];
 
+  const itemsPerPageOptions = [
+    { value: "5", label: "5" },
+    { value: "10", label: "10" },
+    { value: "15", label: "15" },
+    { value: "20", label: "20" },
+    { value: "50", label: "50" },
+    { value: "100", label: "100" },
+  ];
+
   const columns = [
     {
       key: "tanggal",
@@ -2237,14 +2256,35 @@ export default function RekapProformaInvoicePage() {
           <Input label="Filter Tanggal" type="date" value={filterTanggal} onChange={(e) => setFilterTanggal(e.target.value)} />
           <Select label="Filter Bulan" value={filterBulan} onChange={(e) => setFilterBulan(e.target.value)} options={bulanOptions} />
           <Select label="Filter Tahun" value={filterTahun} onChange={(e) => setFilterTahun(e.target.value)} options={tahunOptions} />
+          <Select label="Tampilkan per Halaman" value={String(itemsPerPage)} onChange={(e) => setItemsPerPage(Number(e.target.value))} options={itemsPerPageOptions} />
         </div>
         <div className="text-sm text-gray-500 mb-4">
-          Menampilkan {filteredData.length} dari {data.length} data
+          Menampilkan {paginatedData.length} dari {filteredData.length} data | Halaman {currentPage} dari {totalPages || 1}
           {filterTanggal && ` | Tanggal: ${filterTanggal}`}
           {filterBulan && ` | Bulan: ${bulanOptions.find((b) => b.value === filterBulan)?.label}`}
           {filterTahun && ` | Tahun: ${filterTahun}`}
         </div>
-        <Table columns={columns} data={filteredData} isLoading={isLoading} emptyMessage="Belum ada data proforma invoice" keyExtractor={(row) => row.id} onRowClick={handleDetail} />
+        <Table columns={columns} data={paginatedData} isLoading={isLoading} emptyMessage="Belum ada data proforma invoice" keyExtractor={(row) => row.id} onRowClick={handleDetail} />
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-6">
+            <div className="text-sm text-gray-500">
+              Menampilkan {startIndex + 1} - {Math.min(startIndex + itemsPerPage, filteredData.length)} dari {filteredData.length} data
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === 1 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
+                Sebelumnya
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button key={page} onClick={() => setCurrentPage(page)} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${page === currentPage ? "bg-green-600 text-white" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
+                  {page}
+                </button>
+              ))}
+              <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentPage === totalPages ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
+                Selanjutnya
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Modal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} title="Detail Proforma Invoice" size="lg" footer={
