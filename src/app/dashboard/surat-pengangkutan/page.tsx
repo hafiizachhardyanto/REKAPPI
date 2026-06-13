@@ -138,6 +138,10 @@ const formatParty = (kg: number) => {
   return `${kg.toLocaleString()} KG`;
 };
 
+const formatSisaKG = (kg: number) => {
+  return `${kg.toLocaleString()} KG`;
+};
+
 const isDOExpired = (tanggalKadaluarsa: string) => {
   if (!tanggalKadaluarsa) return false;
   const today = new Date();
@@ -775,7 +779,7 @@ export default function SuratPengangkutanPage() {
           piLoadedKG: piLoadedKG,
           maxZAK: finalMaxZAK,
           party: hasDO ? item.party : formatParty(piKuantitas),
-          sisa: hasDO ? formatParty(partyZAKDO * item.bobotPerUnit) : formatParty(maxZAKPI * bobot),
+          sisa: hasDO ? formatParty(partyZAKDO * item.bobotPerUnit) : formatSisaKG(maxZAKPI * bobot),
           pengambilanZAK: "",
         };
       })
@@ -834,7 +838,7 @@ export default function SuratPengangkutanPage() {
           piLoadedKG: piLoadedKG,
           maxZAK: finalMaxZAK,
           party: hasDO ? item.party : formatParty(piKuantitas),
-          sisa: hasDO ? formatParty(partyZAKDO * item.bobotPerUnit) : formatParty(maxZAKPI * bobot),
+          sisa: hasDO ? formatParty(partyZAKDO * item.bobotPerUnit) : formatSisaKG(maxZAKPI * bobot),
           pengambilanZAK: "",
         };
       })
@@ -893,7 +897,7 @@ export default function SuratPengangkutanPage() {
           jenisPupuk: firstProd.namaProduk,
           party: formatParty(piKuantitas),
           pengambilanZAK: "",
-          sisa: formatParty(maxZAKPI * bobot),
+          sisa: formatSisaKG(maxZAKPI * bobot),
           bobotPerUnit: bobot,
           maxZAK: maxZAKPI,
           fot: fot,
