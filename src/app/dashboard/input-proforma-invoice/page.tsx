@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, runTransaction, getDoc, setDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, runTransaction, getDoc, setDoc, where } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
 import Header from "@/app/components/ui/Header";
@@ -75,7 +75,6 @@ export default function InputProformaInvoicePage() {
   const { user } = useAuth();
   const [stockList, setStockList] = useState<StockGudang[]>([]);
   const [ttdList, setTtdList] = useState<TTDData[]>([]);
-  const [existingPIList, setExistingPIList] = useState<string[]>([]);
   const [customerList, setCustomerList] = useState<CustomerData[]>([]);
   const [fotList, setFotList] = useState<FOTData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -124,11 +123,9 @@ export default function InputProformaInvoicePage() {
   useEffect(() => {
     fetchStockGudang();
     fetchTTD();
-    fetchExistingPI();
     fetchCustomers();
     fetchFOT();
     generateTanggalJatuhTempo();
-    initializeCounter().then(() => refreshPINumber());
   }, []);
 
   useEffect(() => {
@@ -148,51 +145,48 @@ export default function InputProformaInvoicePage() {
     setFormData((prev) => ({ ...prev, tanggalJatuhTempo: dateStr }));
   };
 
-  const initializeCounter = async () => {
-    try {
-      const counterSnap = await getDoc(COUNTER_REF);
-      if (!counterSnap.exists()) {
-        const snapshot = await getDocs(collection(db, "proformaInvoice"));
-        let maxNum = 0;
-        snapshot.docs.forEach((d) => {
-          const val = d.data().nomorPI;
-          if (typeof val === "string" && val.startsWith("BAGB-PI-")) {
-            const num = parseInt(val.replace("BAGB-PI-", ""), 10);
-            if (!isNaN(num) && num > maxNum) maxNum = num;
+  const getUniquePINumber = async (): Promise<string> => {
+    const maxRetries = 10;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await runTransaction(db, async (transaction) => {
+          const counterDoc = await transaction.get(COUNTER_REF);
+          let lastNum = 0;
+          if (counterDoc.exists()) {
+            lastNum = counterDoc.data().lastNumber || 0;
           }
+          let candidateNum = lastNum + 1;
+          let candidatePI = `BAGB-PI-${String(candidateNum).padStart(3, "0")}`;
+          const piRef = doc(db, "proformaInvoice", candidatePI);
+          const piDoc = await transaction.get(piRef);
+          if (piDoc.exists()) {
+            let searchNum = candidateNum + 1;
+            let found = false;
+            while (searchNum <= candidateNum + 100 && !found) {
+              const testPI = `BAGB-PI-${String(searchNum).padStart(3, "0")}`;
+              const testRef = doc(db, "proformaInvoice", testPI);
+              const testDoc = await transaction.get(testRef);
+              if (!testDoc.exists()) {
+                candidateNum = searchNum;
+                candidatePI = testPI;
+                found = true;
+              }
+              searchNum++;
+            }
+            if (!found) {
+              throw new Error("No available PI number found");
+            }
+          }
+          transaction.set(COUNTER_REF, { lastNumber: candidateNum });
+          return candidatePI;
         });
-        await setDoc(COUNTER_REF, { lastNumber: maxNum });
+        return result;
+      } catch (error: any) {
+        if (attempt === maxRetries - 1) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
       }
-    } catch (error) {
-      console.error(error);
     }
-  };
-
-  const getNextPINumber = async (): Promise<string> => {
-    const nextNum = await runTransaction(db, async (transaction) => {
-      const counterDoc = await transaction.get(COUNTER_REF);
-      let lastNum = 0;
-      if (counterDoc.exists()) {
-        lastNum = counterDoc.data().lastNumber || 0;
-      }
-      const next = lastNum + 1;
-      transaction.set(COUNTER_REF, { lastNumber: next });
-      return next;
-    });
-    return `BAGB-PI-${String(nextNum).padStart(3, "0")}`;
-  };
-
-  const refreshPINumber = async (): Promise<string> => {
-    try {
-      const counterSnap = await getDoc(COUNTER_REF);
-      const lastNum = counterSnap.exists() ? (counterSnap.data().lastNumber || 0) : 0;
-      const nextPI = `BAGB-PI-${String(lastNum + 1).padStart(3, "0")}`;
-      setFormData((prev) => ({ ...prev, nomorPI: nextPI }));
-      return nextPI;
-    } catch (error) {
-      console.error(error);
-      return "";
-    }
+    throw new Error("Failed to generate unique PI number after retries");
   };
 
   const fetchStockGudang = async () => {
@@ -210,20 +204,6 @@ export default function InputProformaInvoicePage() {
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TTDData));
       setTtdList(data);
-    } catch (error) { console.error(error); }
-  };
-
-  const fetchExistingPI = async () => {
-    try {
-      const snapshot = await getDocs(collection(db, "proformaInvoice"));
-      const nomorPIs: string[] = [];
-      snapshot.docs.forEach((d) => {
-        const val = d.data().nomorPI;
-        if (typeof val === "string" && val.trim() !== "") {
-          nomorPIs.push(val.trim().toUpperCase());
-        }
-      });
-      setExistingPIList(nomorPIs);
     } catch (error) { console.error(error); }
   };
 
@@ -259,9 +239,7 @@ export default function InputProformaInvoicePage() {
         .map((id) => parseInt(id.replace("BAGB-CS-", ""), 10))
         .filter((n) => !isNaN(n))
         .sort((a, b) => a - b);
-      
       if (ids.length === 0) return "BAGB-CS-001";
-      
       let nextId = 1;
       for (const id of ids) {
         if (id !== nextId) {
@@ -363,12 +341,6 @@ export default function InputProformaInvoicePage() {
     }
   };
 
-  const checkDuplicatePI = (nomorPI: string): boolean => {
-    const normalized = nomorPI.trim().toUpperCase();
-    if (!normalized) return false;
-    return existingPIList.includes(normalized);
-  };
-
   const numberToWords = (num: number): string => {
     if (num === 0) return "NOL RUPIAH";
     const ones = ["", "SATU", "DUA", "TIGA", "EMPAT", "LIMA", "ENAM", "TUJUH", "DELAPAN", "SEMBILAN"];
@@ -423,7 +395,7 @@ export default function InputProformaInvoicePage() {
       const price = parseFloat(item.hargaSatuan) || 0;
       const baseTotal = qty * price;
       if (item.includePPN) {
-      const itemPPN = baseTotal * 0.11;
+        const itemPPN = baseTotal * 0.11;
         ppnTotal += itemPPN;
         subtotal += baseTotal + itemPPN;
       } else {
@@ -542,7 +514,6 @@ export default function InputProformaInvoicePage() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.tanggal) newErrors.tanggal = "Tanggal wajib diisi";
-    if (!formData.nomorPI.trim()) newErrors.nomorPI = "Nomor PI wajib diisi";
     if (!formData.namaCustomer.trim()) newErrors.namaCustomer = "Nama customer wajib diisi";
     if (!formData.alamatCustomer.trim()) newErrors.alamatCustomer = "Alamat customer wajib diisi";
     if (!formData.selectedTTD) newErrors.selectedTTD = "Tanda tangan wajib dipilih";
@@ -563,7 +534,7 @@ export default function InputProformaInvoicePage() {
     try {
       await ensureCustomerExists(formData.namaCustomer, formData.alamatCustomer, formData.npwp);
       const selectedTTD = ttdList.find((t) => t.id === formData.selectedTTD);
-      const finalNomorPI = await getNextPINumber();
+      const finalNomorPI = await getUniquePINumber();
       await addDoc(collection(db, "proformaInvoice"), {
         tanggal: formData.tanggal,
         nomorPI: finalNomorPI,
@@ -611,12 +582,10 @@ export default function InputProformaInvoicePage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      setExistingPIList((prev) => [...prev, finalNomorPI]);
-      setSuccessMessage("Proforma Invoice berhasil disimpan!");
-      const nextPI = await refreshPINumber();
+      setSuccessMessage(`Proforma Invoice ${finalNomorPI} berhasil disimpan!`);
       setFormData({
         tanggal: new Date().toISOString().split("T")[0],
-        nomorPI: nextPI,
+        nomorPI: "",
         namaCustomer: "",
         alamatCustomer: "",
         npwp: "",
@@ -639,7 +608,7 @@ export default function InputProformaInvoicePage() {
       setTimeout(() => setSuccessMessage(""), 5000);
     } catch (error) {
       console.error(error);
-      setErrors({ submit: "Gagal menyimpan data. Silakan coba lagi." });
+      setErrors({ submit: "Gagal menyimpan data. Nomor PI mungkin sedang digunakan akun lain. Silakan coba lagi." });
     } finally {
       setIsSubmitting(false);
     }
@@ -692,8 +661,8 @@ export default function InputProformaInvoicePage() {
             <div className="space-y-4">
               <Input label="Tanggal" type="date" name="tanggal" value={formData.tanggal} onChange={handleChange} error={errors.tanggal} required />
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Nomor PI <span className="text-red-500">*</span></label>
-                <input type="text" value={formData.nomorPI} readOnly className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Nomor PI</label>
+                <input type="text" value="Akan dibuat otomatis saat simpan" readOnly className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed italic" />
               </div>
               <div ref={customerInputRef} className="relative">
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Nama Customer <span className="text-red-500">*</span></label>
@@ -908,10 +877,9 @@ export default function InputProformaInvoicePage() {
         </div>
         <div className="flex items-center justify-end gap-4 pt-4">
           <Button type="button" variant="outline" onClick={() => {
-            const currentNomorPI = formData.nomorPI;
             setFormData({
               tanggal: new Date().toISOString().split("T")[0],
-              nomorPI: currentNomorPI,
+              nomorPI: "",
               namaCustomer: "", alamatCustomer: "", npwp: "",
               metodePembayaran: "Transfer", uangMuka: "", ppnNominal: 0,
               ongkosKirim: "", jumlahUangDibayar: "", tanggalPembayaran: new Date().toISOString().split("T")[0],

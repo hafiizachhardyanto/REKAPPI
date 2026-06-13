@@ -13,6 +13,7 @@ import {
   updateDoc,
   where,
   getDoc,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -1271,7 +1272,7 @@ export default function SuratPengangkutanPage() {
       setTimeout(() => setSuccessMessage(""), 5000);
     } catch (error) {
       console.error(error);
-      setFieldError("submit", "Gagal menyimpan surat pengangkutan. Silakan coba lagi.");
+      setFieldError("submit", "Gagal menyimpan surat pengangkutan. Nomor seri mungkin sedang digunakan akun lain. Silakan coba lagi.");
     } finally {
       setIsSubmitting(false);
     }

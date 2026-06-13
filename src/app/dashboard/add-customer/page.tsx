@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, query, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, addDoc, serverTimestamp, doc, runTransaction } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import Header from "@/app/components/ui/Header";
 import Button from "@/app/components/ui/Button";
@@ -16,6 +16,8 @@ interface CustomerData {
   npwp: string;
   createdAt: any;
 }
+
+const CUSTOMER_COUNTER_REF = doc(db, "counters", "customerCounter");
 
 export default function AddCustomerPage() {
   const [namaCustomer, setNamaCustomer] = useState("");
@@ -44,40 +46,54 @@ export default function AddCustomerPage() {
     }
   };
 
-  const generateCustomerId = async (): Promise<string> => {
-    try {
-      const q = query(collection(db, "customers"), orderBy("customerId", "asc"));
-      const snapshot = await getDocs(q);
-      const ids = snapshot.docs
-        .map((d) => d.data().customerId)
-        .filter((id): id is string => typeof id === "string" && id.startsWith("BAGB-CS-"))
-        .map((id) => parseInt(id.replace("BAGB-CS-", ""), 10))
-        .filter((n) => !isNaN(n))
-        .sort((a, b) => a - b);
-
-      if (ids.length === 0) return "BAGB-CS-001";
-
-      let nextId = 1;
-      for (const id of ids) {
-        if (id !== nextId) {
-          return `BAGB-CS-${String(nextId).padStart(3, "0")}`;
-        }
-        nextId++;
+  const getUniqueCustomerId = async (): Promise<string> => {
+    const maxRetries = 10;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await runTransaction(db, async (transaction) => {
+          const counterDoc = await transaction.get(CUSTOMER_COUNTER_REF);
+          let lastNum = 0;
+          if (counterDoc.exists()) {
+            lastNum = counterDoc.data().lastNumber || 0;
+          }
+          let candidateNum = lastNum + 1;
+          let candidateId = `BAGB-CS-${String(candidateNum).padStart(3, "0")}`;
+          const idRef = doc(db, "customerIdLocks", candidateId);
+          const idDoc = await transaction.get(idRef);
+          if (idDoc.exists()) {
+            let searchNum = candidateNum + 1;
+            let found = false;
+            while (searchNum <= candidateNum + 100 && !found) {
+              const testId = `BAGB-CS-${String(searchNum).padStart(3, "0")}`;
+              const testRef = doc(db, "customerIdLocks", testId);
+              const testDoc = await transaction.get(testRef);
+              if (!testDoc.exists()) {
+                candidateNum = searchNum;
+                candidateId = testId;
+                found = true;
+              }
+              searchNum++;
+            }
+            if (!found) {
+              throw new Error("No available customer ID found");
+            }
+          }
+          transaction.set(idRef, { createdAt: serverTimestamp(), used: true });
+          transaction.set(CUSTOMER_COUNTER_REF, { lastNumber: candidateNum });
+          return candidateId;
+        });
+        return result;
+      } catch (error: any) {
+        if (attempt === maxRetries - 1) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
       }
-      return `BAGB-CS-${String(nextId).padStart(3, "0")}`;
-    } catch (error) {
-      console.error(error);
-      return "BAGB-CS-001";
     }
+    throw new Error("Failed to generate unique customer ID after retries");
   };
 
   const checkDuplicateName = (name: string): boolean => {
     const normalized = name.trim().toLowerCase();
     return customerList.some((c) => c.namaCustomer.trim().toLowerCase() === normalized);
-  };
-
-  const checkDuplicateCustomerId = (id: string): boolean => {
-    return customerList.some((c) => c.customerId.trim().toLowerCase() === id.trim().toLowerCase());
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,18 +107,9 @@ export default function AddCustomerPage() {
     if (Object.keys(newErrors).length > 0) return;
 
     setIsSubmitting(true);
+    setSuccessMessage("");
     try {
-      let customerId = await generateCustomerId();
-      let attempts = 0;
-      while (checkDuplicateCustomerId(customerId) && attempts < 5) {
-        customerId = await generateCustomerId();
-        attempts++;
-      }
-      if (checkDuplicateCustomerId(customerId)) {
-        setErrors({ submit: "Gagal generate Customer ID unik, silakan coba lagi" });
-        setIsSubmitting(false);
-        return;
-      }
+      const customerId = await getUniqueCustomerId();
       await addDoc(collection(db, "customers"), {
         customerId,
         namaCustomer: namaCustomer.trim(),
@@ -119,7 +126,7 @@ export default function AddCustomerPage() {
       setTimeout(() => setSuccessMessage(""), 5000);
     } catch (error) {
       console.error(error);
-      setErrors({ submit: "Gagal menyimpan customer" });
+      setErrors({ submit: "Gagal menyimpan customer. ID mungkin sedang digunakan akun lain. Silakan coba lagi." });
     } finally {
       setIsSubmitting(false);
     }

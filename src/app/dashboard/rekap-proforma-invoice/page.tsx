@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   collection, getDocs, query, orderBy, doc, deleteDoc, updateDoc, where,
-  serverTimestamp, getDoc, addDoc,
+  serverTimestamp, getDoc, addDoc, runTransaction,
 } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -427,30 +427,54 @@ export default function RekapProformaInvoicePage() {
     } catch { setInvoiceExists(false); }
   };
 
-  const getNextBastNumber = async (): Promise<string> => {
+  const getUniqueBastNumber = async (): Promise<string> => {
     const now = new Date();
     const year = now.getFullYear();
     const roman = getRomanMonth(now.getMonth() + 1);
     const prefix = `BAGB/BAB/${roman}/${year}`;
-    const q = query(
-      collection(db, "beritaAcara"),
-      where("nomorSeri", ">=", prefix),
-      where("nomorSeri", "<=", prefix + "\uf8ff"),
-      orderBy("nomorSeri", "asc")
-    );
-    const snapshot = await getDocs(q);
-    const numbers: number[] = [];
-    snapshot.docs.forEach((d) => {
-      const parts = d.data().nomorSeri?.split("/") || [];
-      const last = parseInt(parts[parts.length - 1]);
-      if (!isNaN(last)) numbers.push(last);
-    });
-    numbers.sort((a, b) => a - b);
-    let nextNum = 1;
-    for (const num of numbers) {
-      if (num === nextNum) { nextNum++; } else if (num > nextNum) { break; }
+    const counterRef = doc(db, "counters", `bast_${year}_${roman}`);
+    const maxRetries = 10;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await runTransaction(db, async (transaction) => {
+          const counterDoc = await transaction.get(counterRef);
+          let lastNum = 0;
+          if (counterDoc.exists()) {
+            lastNum = counterDoc.data().lastNumber || 0;
+          }
+          let candidateNum = lastNum + 1;
+          let candidateSeri = `${prefix}/${String(candidateNum).padStart(4, "0")}`;
+          const lockRef = doc(db, "bastLocks", candidateSeri);
+          const lockDoc = await transaction.get(lockRef);
+          if (lockDoc.exists()) {
+            let searchNum = candidateNum + 1;
+            let found = false;
+            while (searchNum <= candidateNum + 100 && !found) {
+              const testSeri = `${prefix}/${String(searchNum).padStart(4, "0")}`;
+              const testRef = doc(db, "bastLocks", testSeri);
+              const testDoc = await transaction.get(testRef);
+              if (!testDoc.exists()) {
+                candidateNum = searchNum;
+                candidateSeri = testSeri;
+                found = true;
+              }
+              searchNum++;
+            }
+            if (!found) {
+              throw new Error("No available BAST number found");
+            }
+          }
+          transaction.set(lockRef, { createdAt: serverTimestamp(), used: true });
+          transaction.set(counterRef, { lastNumber: candidateNum });
+          return candidateSeri;
+        });
+        return result;
+      } catch (error: any) {
+        if (attempt === maxRetries - 1) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+      }
     }
-    return `${prefix}/${String(nextNum).padStart(4, "0")}`;
+    throw new Error("Failed to generate unique BAST number after retries");
   };
 
   const checkNomorSeriExists = (value: string, excludeNomorSeri?: string) => {
@@ -607,29 +631,49 @@ export default function RekapProformaInvoicePage() {
     });
   };
 
-  const getNextInvoiceBaseNumber = async (): Promise<string> => {
-    const piQuery = query(collection(db, "proformaInvoice"), where("invoiceBaseNumber", "!=", ""));
-    const piSnapshot = await getDocs(piQuery);
-    const suratQuery = query(collection(db, "suratPengangkutan"), where("nomorInvoice", "!=", ""));
-    const suratSnapshot = await getDocs(suratQuery);
-    const usedBases: number[] = [];
-    piSnapshot.docs.forEach((d) => {
-      const bn = d.data().invoiceBaseNumber;
-      if (bn) usedBases.push(parseInt(bn));
-    });
-    suratSnapshot.docs.forEach((d) => {
-      const ni = d.data().nomorInvoice;
-      if (ni) {
-        const parsed = parseInvoiceNumber(ni);
-        if (parsed) usedBases.push(parsed.baseNum);
+  const getUniqueInvoiceBaseNumber = async (): Promise<string> => {
+    const counterRef = doc(db, "counters", "invoiceBase");
+    const maxRetries = 10;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const result = await runTransaction(db, async (transaction) => {
+          const counterDoc = await transaction.get(counterRef);
+          let lastNum = 0;
+          if (counterDoc.exists()) {
+            lastNum = counterDoc.data().lastNumber || 0;
+          }
+          let candidateNum = lastNum + 1;
+          const candidateBase = String(candidateNum).padStart(4, "0");
+          const lockRef = doc(db, "invoiceBaseLocks", candidateBase);
+          const lockDoc = await transaction.get(lockRef);
+          if (lockDoc.exists()) {
+            let searchNum = candidateNum + 1;
+            let found = false;
+            while (searchNum <= candidateNum + 1000 && !found) {
+              const testBase = String(searchNum).padStart(4, "0");
+              const testRef = doc(db, "invoiceBaseLocks", testBase);
+              const testDoc = await transaction.get(testRef);
+              if (!testDoc.exists()) {
+                candidateNum = searchNum;
+                found = true;
+              }
+              searchNum++;
+            }
+            if (!found) {
+              throw new Error("No available invoice base number found");
+            }
+          }
+          transaction.set(lockRef, { createdAt: serverTimestamp(), used: true });
+          transaction.set(counterRef, { lastNumber: candidateNum });
+          return String(candidateNum).padStart(4, "0");
+        });
+        return result;
+      } catch (error: any) {
+        if (attempt === maxRetries - 1) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
       }
-    });
-    usedBases.sort((a, b) => a - b);
-    let nextBase = 1;
-    for (const num of usedBases) {
-      if (num === nextBase) { nextBase++; } else if (num > nextBase) { break; }
     }
-    return String(nextBase).padStart(4, "0");
+    throw new Error("Failed to generate unique invoice base number after retries");
   };
 
   const generateInvoiceNumber = async (surat: SuratMuatInfo): Promise<string> => {
@@ -645,7 +689,7 @@ export default function RekapProformaInvoicePage() {
     const piSnap = await getDoc(piRef);
     let baseNumber = piSnap.data()?.invoiceBaseNumber;
     if (!baseNumber) {
-      baseNumber = await getNextInvoiceBaseNumber();
+      baseNumber = await getUniqueInvoiceBaseNumber();
       await updateDoc(piRef, { invoiceBaseNumber: baseNumber });
     }
     const suratQ1 = query(collection(db, "suratPengangkutan"), where("nomorPI", "==", selectedItem.nomorPI));
@@ -682,7 +726,7 @@ export default function RekapProformaInvoicePage() {
       const piSnap = await getDoc(piRef);
       let baseNumber = piSnap.data()?.invoiceBaseNumber;
       if (!baseNumber) {
-        baseNumber = await getNextInvoiceBaseNumber();
+        baseNumber = await getUniqueInvoiceBaseNumber();
         await updateDoc(piRef, { invoiceBaseNumber: baseNumber });
       }
       const nomor = `BAGB-INV-${baseNumber}`;
@@ -737,6 +781,9 @@ export default function RekapProformaInvoicePage() {
     try {
       const piRow = data.find((d) => d.nomorPI === nomorPI);
       if (piRow) {
+        if (piRow.invoiceBaseNumber) {
+          try { await deleteDoc(doc(db, "invoiceBaseLocks", piRow.invoiceBaseNumber)); } catch {}
+        }
         await updateDoc(doc(db, "proformaInvoice", piRow.id), {
           invoiceBaseNumber: null,
           updatedAt: serverTimestamp(),
@@ -763,8 +810,12 @@ export default function RekapProformaInvoicePage() {
     setIsGeneratingInvoice(true);
     try {
       const piRef = doc(db, "proformaInvoice", selectedItem.id);
+      const oldBase = selectedItem.invoiceBaseNumber;
+      if (oldBase) {
+        try { await deleteDoc(doc(db, "invoiceBaseLocks", oldBase)); } catch {}
+      }
       await updateDoc(piRef, { invoiceBaseNumber: null, updatedAt: serverTimestamp() });
-      const baseNumber = await getNextInvoiceBaseNumber();
+      const baseNumber = await getUniqueInvoiceBaseNumber();
       await updateDoc(piRef, { invoiceBaseNumber: baseNumber, updatedAt: serverTimestamp() });
       const nomor = `BAGB-INV-${baseNumber}`;
       setInvoiceNomor(nomor);
@@ -1332,7 +1383,7 @@ export default function RekapProformaInvoicePage() {
 
   const handleGenerateBast = async (item: ProformaInvoice) => {
     try {
-      const nomor = await getNextBastNumber();
+      const nomor = await getUniqueBastNumber();
       const suratList = getSuratMuatForPI(item.nomorPI);
       const bastItems: BeritaAcaraItem[] = [];
       let no = 1;
